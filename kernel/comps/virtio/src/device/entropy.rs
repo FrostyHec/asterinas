@@ -1,5 +1,7 @@
+use core::hint::spin_loop;
+
 use alloc::{boxed::Box, sync::Arc};
-use ostd::{mm::{DmaDirection, DmaStream, FrameAllocOptions}, sync::SpinLock};
+use ostd::{early_println, mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions}, sync::SpinLock};
 
 use crate::{queue::VirtQueue, transport::VirtioTransport};
 
@@ -9,6 +11,26 @@ pub struct EntropyDevice {
     request_buffer: DmaStream,
     request_queue: SpinLock<VirtQueue>,
     transport: SpinLock<Box<dyn VirtioTransport>>,
+}
+
+fn test_device(device: Arc<EntropyDevice>) {
+    let mut request_queue = device.request_queue.lock();
+    let request_buffer = device.request_buffer.clone();
+    let value = request_buffer.reader().unwrap().read_once::<u64>().unwrap();
+    early_println!("Before value:{:x}", value);
+    request_queue
+        .add_dma_buf(&[], &[&DmaStreamSlice::new(&request_buffer, 0, 8)])
+        .unwrap();
+    if request_queue.should_notify() {
+        request_queue.notify();
+    }
+    while !request_queue.can_pop() {
+        spin_loop();
+    }
+    request_queue.pop_used().unwrap();
+    request_buffer.sync(0..8).unwrap();
+    let value = request_buffer.reader().unwrap().read_once::<u64>().unwrap();
+    early_println!("After value:{:x}", value);
 }
 
 impl EntropyDevice {
@@ -35,7 +57,7 @@ impl EntropyDevice {
         // Finish init
         device.transport.lock().finish_init();
         // Test device
-        // test_device(device);
+        test_device(device);
         Ok(())
     }
 }

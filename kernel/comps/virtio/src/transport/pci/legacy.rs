@@ -84,6 +84,7 @@ impl VirtioPciLegacyTransport {
             0x1004 => VirtioDeviceType::ScsiHost,
             0x1005 => VirtioDeviceType::Entropy,
             0x1009 => VirtioDeviceType::Transport9P,
+            0x105a => VirtioDeviceType::FileSystem,
             _ => {
                 warn!(
                     "Unrecognized virtio-pci device id:{:x?}",

@@ -83,6 +83,10 @@ QEMU_ARGS="\
     -device virtio-serial-pci,disable-legacy=on,disable-modern=off$IOMMU_DEV_EXTRA \
     -device virtconsole,chardev=mux \
     -device virtio-rng \
+    -chardev socket,id=char0,path=/tmp/vhostqemu \
+    -device vhost-user-fs-pci,queue-size=1024,chardev=char0,tag=myfs \
+    -object memory-backend-memfd,id=mem,size=${MEM:-1G},share=on \
+    -numa node,memdev=mem \
     $IOMMU_EXTRA_ARGS \
 "
 
