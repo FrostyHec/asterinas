@@ -1,4 +1,4 @@
-use alloc::boxed::Box;
+use alloc::{boxed::Box, sync::Arc};
 use log::debug;
 use ostd::sync::SpinLock;
 
@@ -21,17 +21,24 @@ impl FileSystemDevice {
     pub fn init(mut transport: Box<dyn VirtioTransport>) -> Result<(), VirtioDeviceError> {
         let config_manager = VirtioFileSystemConfig::new_manager(transport.as_ref());
         debug!("virtio_fs_config = {:?}", config_manager.read_config());
-        // Initalize the request virtqueue
-        const REQUEST_QUEUE_INDEX: u16 = 0;
-        // Create device
-        // let device = Arc::new(Self {
 
-        //     transport: SpinLock::new(transport),
-        // });
-        // Finish init
-        // device.transport.lock().finish_init();
-        // Test device
+        // Initalize the request virtqueue
+        const RECV0_QUEUE_INDEX: u16 = 0;
+        const TRANSMIT0_QUEUE_INDEX: u16 = 1;
+        let receive_queue =
+            SpinLock::new(VirtQueue::new(RECV0_QUEUE_INDEX, 2, transport.as_mut()).unwrap());
+        let transmit_queue =
+            SpinLock::new(VirtQueue::new(TRANSMIT0_QUEUE_INDEX, 2, transport.as_mut()).unwrap());
+
+        let device = Arc::new(Self {
+            config_manager,
+            transport: SpinLock::new(transport),
+            receive_queue,
+            transmit_queue,
+        });
+        
         Ok(())
     }
+
 }
 
