@@ -134,6 +134,7 @@
  * supported minor version).
  */
 
+use int_to_c_enum::TryFromInt;
 use ostd::Pod;
 use bitflags::bitflags;
 
@@ -191,7 +192,7 @@ pub struct FuseKstatfs {
 pub struct FuseFileLock {
 	start: u64,
 	end: u64,
-	types: u32, //TODO: type
+	typ: u32, //TODO: type
 	pid: u32, /* tgid */
 }
 
@@ -394,7 +395,9 @@ const FUSE_IOCTL_MAX_IOV: usize = 256;
 const FUSE_POLL_SCHEDULE_NOTIFY: usize = 1 << 0;
 
 #[allow(non_camel_case_types)]
-enum FuseOpcode {
+#[derive(Debug, Clone, Copy, TryFromInt)]
+#[repr(u32)]
+pub enum FuseOpcode {
 	FUSE_LOOKUP	   = 1,
 	FUSE_FORGET	   = 2,  /* no reply */
 	FUSE_GETATTR	   = 3,
@@ -709,10 +712,10 @@ pub struct FuseAccessIn {
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseInitIn {
-	major: u32,
-	minor: u32,
-	max_readahead: u32,
-	flags: InitFlags,
+	pub major: u32,
+	pub minor: u32,
+	pub max_readahead: u32,
+	pub flags: InitFlags,
 }
 
 const FUSE_COMPAT_INIT_OUT_SIZE: usize = 8;
@@ -839,14 +842,14 @@ pub struct FuseFallocateIn {
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseInHeader {
-	len: u32,
-	opcode: u32,
-	unique: u64,
-	nodeid: u64,
-	uid: u32,
-	gid: u32,
-	pid: u32,
-	padding: u32,
+	pub len: u32,
+	pub opcode: u32,
+	pub unique: u64,
+	pub nodeid: u64,
+	pub uid: u32,
+	pub gid: u32,
+	pub pid: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
@@ -863,7 +866,7 @@ pub struct FuseDirent {
 	ino: u64,
 	off: u64,
 	namelen: u32,
-	types: u32, //TODO: type
+	typ: u32, //TODO: type
 	name: [char], //TODO: char name[];
 }
 

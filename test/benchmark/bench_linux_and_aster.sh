@@ -67,7 +67,7 @@ run_benchmark() {
     local linux_cmd="/usr/local/qemu/bin/qemu-system-x86_64 \
         --no-reboot \
         -smp 1 \
-        -m 8G \
+        -m 1G \
         -machine q35,kernel-irqchip=split \
         -cpu Icelake-Server,-pcid,+x2apic \
         --enable-kvm \
