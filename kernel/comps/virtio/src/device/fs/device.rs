@@ -1,4 +1,4 @@
-use core::{hint::spin_loop};
+use core::hint::spin_loop;
 
 use alloc::{boxed::Box, sync::Arc};
 use log::debug;
@@ -6,7 +6,7 @@ use ostd::{mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions, VmRe
 
 use crate::{device::{fs::header::{FuseInHeader, FuseInitIn, FuseOpcode, FuseOpenIn, FuseOutHeader, OpenFlags}, VirtioDeviceError}, queue::VirtQueue, transport::{ConfigManager, VirtioTransport}};
 
-use super::config::VirtioFileSystemConfig;
+use super::{config::VirtioFileSystemConfig, header::{FuseInPacket, FuseInPayload, FuseOutPacket}};
 
 pub struct FileSystemDevice {
     config_manager: ConfigManager<VirtioFileSystemConfig>,
@@ -29,7 +29,7 @@ fn bytes_into_dma(bytes: &[u8], init: bool) -> DmaStreamSlice<DmaStream> {
 impl FileSystemDevice {
     pub fn negotiate_features(features: u64) -> u64 {
         if features==1 {
-            log::warn!("Feature VIRTIO_FS_F_NOTIFICATION of Virtio fs unsupported")
+            log::warn!("Feature VIRTIO_FS_F_NOTIFICATION of Virtio fs is unsupported")
         }
         0
     }
@@ -64,38 +64,45 @@ impl FileSystemDevice {
             request_queue,
         });
         
-        let in_header = FuseInHeader { 
-            len: (size_of::<FuseInHeader>() + size_of::<FuseInitIn>()) as u32, 
-            opcode: FuseOpcode::FUSE_INIT as u32,
-            unique: 0, 
-            nodeid: 1,
-            uid: 1,
-            gid: 1, 
-            pid: 1,
-            padding: 0, 
-        };
-        let in_open = FuseOpenIn {
-            flags: OpenFlags::empty(),
-            unused: 0,
-        };
-        let out_header = FuseOutHeader::default();
-        let out_open = FuseOpenIn::default();
-        let in_packet = [in_header.as_bytes(), in_open.as_bytes()].concat();
-        let mut out_packet = [out_header.as_bytes(), out_open.as_bytes()].concat();
-        let out_packet = out_packet.as_mut_slice();
-
-        device.request(in_packet.as_slice(), out_packet);
+        let out_packet = device.request(FuseInPacket {
+            header: FuseInHeader { 
+                len: 0, opcode: 0, //will be filled automatically in request()
+                unique: 0, 
+                nodeid: 1,
+                uid: 1,
+                gid: 1, 
+                pid: 1,
+                padding: 0,
+            },
+            payload: FuseOpenIn {
+                flags: OpenFlags::empty(),
+                unused: 0,
+            },
+        });
         
         debug!("{:?}", out_packet);
 
         Ok(())
     }
 
-    fn request(&self, in_packet: &[u8], out_packet: &mut [u8]) -> usize {
+    fn request<T: FuseInPayload>(&self, mut in_packet: FuseInPacket<T>) -> FuseOutPacket<T::FuseOutPayload> {
+        in_packet.header.len = size_of::<FuseInPacket<T>>() as u32;
+        in_packet.header.opcode = T::opcode() as u32;
+        let in_bytes = in_packet.as_bytes();
+        let mut out_packet = FuseOutPacket::<T::FuseOutPayload>::default(); 
+        let out_bytes = out_packet.as_bytes_mut();
+        let read_len = self.request_by_bytes(in_bytes, out_bytes);
+        if read_len != out_bytes.len() {
+            log::warn!("the size of fs's out packet mismatch");
+        }
+        out_packet
+    }
+
+    fn request_by_bytes(&self, in_bytes: &[u8], out_bytes: &mut [u8]) -> usize {
         let mut queue = self.request_queue.disable_irq().lock();
         
-        let in_dma = bytes_into_dma(in_packet, true);
-        let out_dma = bytes_into_dma(out_packet, false);
+        let in_dma = bytes_into_dma(in_bytes, true);
+        let out_dma = bytes_into_dma(out_bytes, false);
         let token = queue
             .add_dma_buf(&[&in_dma], &[&out_dma])
             .expect("add queue failed");
@@ -107,7 +114,7 @@ impl FileSystemDevice {
         }
         queue.pop_used_with_token(token).expect("pop used failed");
         out_dma.sync().expect("sync failed");
-        out_dma.reader().expect("get reader error").read(&mut VmWriter::from(out_packet))
+        out_dma.reader().expect("get reader error").read(&mut VmWriter::from(out_bytes))
     }
 }
 

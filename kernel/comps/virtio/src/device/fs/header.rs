@@ -446,10 +446,12 @@ pub enum FuseOpcode {
 	/* CUSE specific operations */
 	CUSE_INIT          = 4096,
 }
-
-pub trait FuseInPayload: Pod {
-	type FuseOutPayload: Pod + Default;
+pub trait FuseInPayload: Pod + Default + Clone {
+	type FuseOutPayload: Pod + Default + Clone;
 	fn opcode() -> FuseOpcode;
+	fn get_out_defult() -> Self::FuseOutPayload {
+		return Self::FuseOutPayload::default();
+	}
 }
 
 #[repr(C)]
@@ -457,7 +459,7 @@ pub trait FuseInPayload: Pod {
 pub struct FuseNoReply {}
 
 #[allow(non_camel_case_types)]
-enum FuseNotifyCode {
+pub enum FuseNotifyCode {
 	FUSE_NOTIFY_POLL   = 1,
 	FUSE_NOTIFY_INVAL_INODE = 2,
 	FUSE_NOTIFY_INVAL_ENTRY = 3,
@@ -465,6 +467,9 @@ enum FuseNotifyCode {
 	FUSE_NOTIFY_RETRIEVE = 5,
 	FUSE_NOTIFY_DELETE = 6,
 	FUSE_NOTIFY_CODE_MAX,
+}
+pub trait FuseNotify: Pod {
+	fn notify_code() -> FuseNotifyCode;
 }
 
 /* The read buffer is required to be at least 8k, but may be much larger */
@@ -490,6 +495,12 @@ pub struct FuseEntryOut {
 pub struct FuseForgetIn {
 	pub nlookup: u64,
 }
+impl FuseInPayload for FuseForgetIn {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_FORGET
+	}
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
@@ -504,6 +515,12 @@ pub struct FuseBatchForgetIn {
 	pub count: u32,
 	pub dummy: u32,
 }
+impl FuseInPayload for FuseBatchForgetIn {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_BATCH_FORGET
+	}
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
@@ -511,6 +528,12 @@ pub struct FuseGetattrIn {
 	pub getattr_flags: GetattrFlags,
 	pub dummy: u32,
 	pub fh: u64,
+}
+impl FuseInPayload for FuseGetattrIn {
+	type FuseOutPayload = FuseAttrOut;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_GETATTR
+	}
 }
 
 const FUSE_COMPAT_ATTR_OUT_SIZE: usize = 96;
@@ -534,6 +557,12 @@ pub struct FuseMknodIn {
 	pub umask: u32,
 	pub padding: u32,
 }
+impl FuseInPayload for FuseMknodIn {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_MKNOD
+	}
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
@@ -541,11 +570,23 @@ pub struct FuseMkdirIn {
 	pub mode: u32,
 	pub umask: u32,
 }
+impl FuseInPayload for FuseMkdirIn {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_MKDIR
+	}
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseRenameIn {
 	pub newdir: u64,
+}
+impl FuseInPayload for FuseRenameIn {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_RENAME
+	}
 }
 
 #[repr(C)]
@@ -555,11 +596,23 @@ pub struct FuseRename2In {
 	pub flags: u32,
 	pub padding: u32,
 }
+impl FuseInPayload for FuseRename2In {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_RENAME2
+	}
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseLinkIn {
 	pub oldnodeid: u64,
+}
+impl FuseInPayload for FuseLinkIn {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_LINK
+	}
 }
 
 #[repr(C)]
@@ -582,12 +635,24 @@ pub struct FuseSetattrIn {
 	pub gid: u32,
 	pub unused5: u32,
 }
+impl FuseInPayload for FuseSetattrIn {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_SETATTR
+	}
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseOpenIn {
 	pub flags: OpenFlags,
 	pub unused: u32,
+}
+impl FuseInPayload for FuseOpenIn {
+	type FuseOutPayload = FuseOpenOut;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_OPEN
+	}
 }
 
 #[repr(C)]
@@ -597,6 +662,12 @@ pub struct FuseCreateIn {
 	pub mode: u32,
 	pub umask: u32,
 	pub padding: u32,
+}
+impl FuseInPayload for FuseCreateIn {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_CREATE
+	}
 }
 
 #[repr(C)]
@@ -615,6 +686,12 @@ pub struct FuseReleaseIn {
 	pub release_flags: ReleaseFlags,
 	pub lock_owner: u64,
 }
+impl FuseInPayload for FuseReleaseIn {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_RELEASE
+	}
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
@@ -623,6 +700,12 @@ pub struct FuseFlushIn {
 	pub unused: u32,
 	pub padding: u32,
 	pub lock_owner: u64,
+}
+impl FuseInPayload for FuseFlushIn {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_FLUSH
+	}
 }
 
 #[repr(C)]
@@ -635,6 +718,12 @@ pub struct FuseReadIn {
 	pub lock_owner: u64,
 	pub flags: u32,
 	pub padding: u32,
+}
+impl FuseInPayload for FuseReadIn {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_READ
+	}
 }
 
 const FUSE_COMPAT_WRITE_IN_SIZE: usize = 24;
@@ -649,6 +738,12 @@ pub struct FuseWriteIn {
 	pub lock_owner: u64,
 	pub flags: u32,
 	pub padding: u32,
+}
+impl FuseInPayload for FuseWriteIn {
+	type FuseOutPayload = FuseWriteOut;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_WRITE
+	}
 }
 
 #[repr(C)]
@@ -673,6 +768,12 @@ pub struct FuseFsyncIn {
 	pub fsync_flags: u32,
 	pub padding: u32,
 }
+impl FuseInPayload for FuseFsyncIn {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_FSYNC
+	}
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
@@ -680,12 +781,24 @@ pub struct FuseSetxattrIn {
 	pub size: u32,
 	pub flags: u32,
 }
+impl FuseInPayload for FuseSetxattrIn {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_SETXATTR
+	}
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseGetxattrIn {
 	pub size: u32,
 	pub padding: u32,
+}
+impl FuseInPayload for FuseGetxattrIn {
+	type FuseOutPayload = FuseGetxattrOut;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_GETXATTR
+	}
 }
 
 #[repr(C)]
@@ -704,6 +817,13 @@ pub struct FuseLkIn {
 	pub lk_flags: u32,
 	pub padding: u32,
 }
+// TODO: which opcode?
+// impl FuseInPayload for FuseLkIn {
+// 	type FuseOutPayload = FuseLkOut;
+// 	fn opcode() -> FuseOpcode {
+// 		FuseOpcode:: //not FUSE_LINK
+// 	}
+// }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
@@ -717,6 +837,12 @@ pub struct FuseAccessIn {
 	pub mask: u32,
 	pub padding: u32,
 }
+impl FuseInPayload for FuseAccessIn {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_ACCESS
+	}
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
@@ -725,6 +851,12 @@ pub struct FuseInitIn {
 	pub minor: u32,
 	pub max_readahead: u32,
 	pub flags: InitFlags,
+}
+impl FuseInPayload for FuseInitIn {
+	type FuseOutPayload = FuseInitOut;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_INIT
+	}
 }
 
 const FUSE_COMPAT_INIT_OUT_SIZE: usize = 8;
@@ -754,6 +886,12 @@ pub struct CuseInitIn {
 	pub unused: u32,
 	pub flags: CuseInitFlags,
 }
+impl FuseInPayload for CuseInitIn {
+	type FuseOutPayload = CuseInitOut;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::CUSE_INIT
+	}
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
@@ -774,6 +912,12 @@ pub struct CuseInitOut {
 pub struct FuseInterruptIn {
 	pub unique: u64,
 }
+impl FuseInPayload for FuseInterruptIn {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_INTERRUPT
+	}
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
@@ -781,6 +925,12 @@ pub struct FuseBmapIn {
 	pub block: u64,
 	pub blocksize: u32,
 	pub padding: u32,
+}
+impl FuseInPayload for FuseBmapIn {
+	type FuseOutPayload = FuseBmapOut;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_BMAP
+	}
 }
 
 #[repr(C)]
@@ -798,6 +948,12 @@ pub struct FuseIoctlIn {
 	pub arg: u64,
 	pub in_size: u32,
 	pub out_size: u32,
+}
+impl FuseInPayload for FuseIoctlIn {
+	type FuseOutPayload = FuseIoctlOut;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_IOCTL
+	}
 }
 
 #[repr(C)]
@@ -824,6 +980,12 @@ pub struct FusePollIn {
 	pub flags: u32,
 	pub events: u32,
 }
+impl FuseInPayload for FusePollIn {
+	type FuseOutPayload = FusePollOut;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_POLL
+	}
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
@@ -837,6 +999,11 @@ pub struct FusePollOut {
 pub struct FuseNotifyPollWakeupOut {
 	pub kh: u64,
 }
+impl FuseNotify for FuseNotifyPollWakeupOut  {
+	fn notify_code() -> FuseNotifyCode {
+		FuseNotifyCode::FUSE_NOTIFY_POLL
+	}
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
@@ -846,6 +1013,12 @@ pub struct FuseFallocateIn {
 	pub length: u64,
 	pub mode: u32,
 	pub padding: u32,
+}
+impl FuseInPayload for FuseFallocateIn {
+	type FuseOutPayload = FuseNoReply;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_FALLOCATE
+	}
 }
 
 #[repr(C)]
@@ -860,6 +1033,13 @@ pub struct FuseInHeader {
 	pub pid: u32,
 	pub padding: u32,
 }
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
+pub struct FuseInPacket<T: Pod + Default + Clone> {
+	pub header: FuseInHeader,
+	pub payload: T,
+}
+
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
@@ -868,6 +1048,13 @@ pub struct FuseOutHeader {
 	pub error: i32,
 	pub unique: u64,
 }
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
+pub struct FuseOutPacket<T: Pod + Default + Clone> {
+	pub header: FuseOutHeader,
+	pub payload: T,
+}
+
 
 // #[repr(C)]
 // #[derive(Default, Debug, Clone, Copy, Pod)]
@@ -902,6 +1089,11 @@ pub struct FuseNotifyInvalInodeOut {
 	pub off: i64,
 	pub len: i64,
 }
+impl FuseNotify for FuseNotifyInvalInodeOut {
+	fn notify_code() -> FuseNotifyCode {
+		FuseNotifyCode::FUSE_NOTIFY_INVAL_INODE
+	}
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
@@ -909,6 +1101,11 @@ pub struct FuseNotifyInvalEntryOut {
 	pub parent: u64,
 	pub namelen: u32,
 	pub padding: u32,
+}
+impl FuseNotify for FuseNotifyInvalEntryOut {
+	fn notify_code() -> FuseNotifyCode {
+		FuseNotifyCode::FUSE_NOTIFY_INVAL_ENTRY
+	}
 }
 
 #[repr(C)]
@@ -919,6 +1116,11 @@ pub struct FuseNotifyDeleteOut {
 	pub namelen: u32,
 	pub padding: u32,
 }
+impl FuseNotify for FuseNotifyDeleteOut {
+	fn notify_code() -> FuseNotifyCode {
+		FuseNotifyCode::FUSE_NOTIFY_DELETE
+	}
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
@@ -927,6 +1129,11 @@ pub struct FuseNotifyStoreOut {
 	pub offset: u64,
 	pub size: u32,
 	pub padding: u32,
+}
+impl FuseNotify for FuseNotifyStoreOut {
+	fn notify_code() -> FuseNotifyCode {
+		FuseNotifyCode::FUSE_NOTIFY_STORE
+	}
 }
 
 #[repr(C)]
@@ -937,6 +1144,11 @@ pub struct FuseNotifyRetrieveOut {
 	pub offset: u64,
 	pub size: u32,
 	pub padding: u32,
+}
+impl FuseNotify for FuseNotifyRetrieveOut {
+	fn notify_code() -> FuseNotifyCode {
+		FuseNotifyCode::FUSE_NOTIFY_RETRIEVE
+	}
 }
 
 /* Matches the size of fuse_write_in */
@@ -961,6 +1173,12 @@ pub struct FuseLseekIn {
 	pub offset: u64,
 	pub whence: u32,
 	pub padding: u32,
+}
+impl FuseInPayload for FuseLseekIn {
+	type FuseOutPayload = FuseLseekOut;
+	fn opcode() -> FuseOpcode {
+		FuseOpcode::FUSE_LSEEK
+	}
 }
 
 #[repr(C)]
