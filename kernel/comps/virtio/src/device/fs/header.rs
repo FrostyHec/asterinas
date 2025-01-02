@@ -140,10 +140,10 @@ use bitflags::bitflags;
 
 
 /** Version number of this interface */
-const FUSE_KERNEL_VERSION: usize = 7;
+pub const FUSE_KERNEL_VERSION: u32 = 7;
 
 /** Minor version number of this interface */
-const FUSE_KERNEL_MINOR_VERSION: usize = 26;
+pub const FUSE_KERNEL_MINOR_VERSION: u32 = 26;
 
 /** The node ID of the root inode */
 const FUSE_ROOT_ID: usize = 1;
@@ -154,46 +154,46 @@ const FUSE_ROOT_ID: usize = 1;
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseAttr {
-	ino: u64,
-	size: u64,
-	blocks: u64,
-	atime: u64,
-	mtime: u64,
-	ctime: u64,
-	atimensec: u32,
-	mtimensec: u32,
-	ctimensec: u32,
-	mode: u32,
-	nlink: u32,
-	uid: u32,
-	gid: u32,
-	rdev: u32,
-	blksize: u32,
-	padding: u32,
+	pub ino: u64,
+	pub size: u64,
+	pub blocks: u64,
+	pub atime: u64,
+	pub mtime: u64,
+	pub ctime: u64,
+	pub atimensec: u32,
+	pub mtimensec: u32,
+	pub ctimensec: u32,
+	pub mode: u32,
+	pub nlink: u32,
+	pub uid: u32,
+	pub gid: u32,
+	pub rdev: u32,
+	pub blksize: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseKstatfs {
-	blocks: u64,
-	bfree: u64,
-	bavail: u64,
-	files: u64,
-	ffree: u64,
-	bsize: u32,
-	namelen: u32,
-	frsize: u32,
-	padding: u32,
-	spare: [u32; 6],
+	pub blocks: u64,
+	pub bfree: u64,
+	pub bavail: u64,
+	pub files: u64,
+	pub ffree: u64,
+	pub bsize: u32,
+	pub namelen: u32,
+	pub frsize: u32,
+	pub padding: u32,
+	pub spare: [u32; 6],
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseFileLock {
-	start: u64,
-	end: u64,
-	typ: u32, //TODO: type
-	pid: u32, /* tgid */
+	pub start: u64,
+	pub end: u64,
+	pub typ: u32, //TODO: type
+	pub pid: u32, /* tgid */
 }
 
 
@@ -447,6 +447,15 @@ pub enum FuseOpcode {
 	CUSE_INIT          = 4096,
 }
 
+pub trait FuseInPayload: Pod {
+	type FuseOutPayload: Pod + Default;
+	fn opcode() -> FuseOpcode;
+}
+
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
+pub struct FuseNoReply {}
+
 #[allow(non_camel_case_types)]
 enum FuseNotifyCode {
 	FUSE_NOTIFY_POLL   = 1,
@@ -466,42 +475,42 @@ const FUSE_COMPAT_ENTRY_OUT_SIZE: usize = 120;
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseEntryOut {
-	nodeid: u64,		/* Inode ID */
-	generation: u64,	/* Inode generation: nodeid:gen must
+	pub nodeid: u64,		/* Inode ID */
+	pub generation: u64,	/* Inode generation: nodeid:gen must
 					   be unique for the fs's lifetime */
-	entry_valid: u64,	/* Cache timeout for the name */
-	attr_valid: u64,	/* Cache timeout for the attributes */
-	entry_valid_nsec: u32,
-	attr_valid_nsec: u32,
-	attr: FuseAttr,
+	pub entry_valid: u64,	/* Cache timeout for the name */
+	pub attr_valid: u64,	/* Cache timeout for the attributes */
+	pub entry_valid_nsec: u32,
+	pub attr_valid_nsec: u32,
+	pub attr: FuseAttr,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseForgetIn {
-	nlookup: u64,
+	pub nlookup: u64,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseForgetOne {
-	nodeid: u64,
-	nlookup: u64,
+	pub nodeid: u64,
+	pub nlookup: u64,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseBatchForgetIn {
-	count: u32,
-	dummy: u32,
+	pub count: u32,
+	pub dummy: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseGetattrIn {
-	getattr_flags: GetattrFlags,
-	dummy: u32,
-	fh: u64,
+	pub getattr_flags: GetattrFlags,
+	pub dummy: u32,
+	pub fh: u64,
 }
 
 const FUSE_COMPAT_ATTR_OUT_SIZE: usize = 96;
@@ -509,10 +518,10 @@ const FUSE_COMPAT_ATTR_OUT_SIZE: usize = 96;
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseAttrOut {
-	attr_valid: u64,	/* Cache timeout for the attributes */
-	attr_valid_nsec: u32,
-	dummy: u32,
-	attr: FuseAttr,
+	pub attr_valid: u64,	/* Cache timeout for the attributes */
+	pub attr_valid_nsec: u32,
+	pub dummy: u32,
+	pub attr: FuseAttr,
 }
 
 const FUSE_COMPAT_MKNOD_IN_SIZE: usize = 8;
@@ -520,112 +529,112 @@ const FUSE_COMPAT_MKNOD_IN_SIZE: usize = 8;
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseMknodIn {
-	mode: u32,
-	rdev: u32,
-	umask: u32,
-	padding: u32,
+	pub mode: u32,
+	pub rdev: u32,
+	pub umask: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseMkdirIn {
-	mode: u32,
-	umask: u32,
+	pub mode: u32,
+	pub umask: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseRenameIn {
-	newdir: u64,
+	pub newdir: u64,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseRename2In {
-	newdir: u64,
-	flags: u32,
-	padding: u32,
+	pub newdir: u64,
+	pub flags: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseLinkIn {
-	oldnodeid: u64,
+	pub oldnodeid: u64,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseSetattrIn {
-	valid: ValidBitmasks,
-	padding: u32,
-	fh: u64,
-	size: u64,
-	lock_owner: u64,
-	atime: u64,
-	mtime: u64,
-	ctime: u64,
-	atimensec: u32,
-	mtimensec: u32,
-	ctimensec: u32,
-	mode: u32,
-	unused4: u32,
-	uid: u32,
-	gid: u32,
-	unused5: u32,
+	pub valid: ValidBitmasks,
+	pub padding: u32,
+	pub fh: u64,
+	pub size: u64,
+	pub lock_owner: u64,
+	pub atime: u64,
+	pub mtime: u64,
+	pub ctime: u64,
+	pub atimensec: u32,
+	pub mtimensec: u32,
+	pub ctimensec: u32,
+	pub mode: u32,
+	pub unused4: u32,
+	pub uid: u32,
+	pub gid: u32,
+	pub unused5: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseOpenIn {
-	flags: OpenFlags,
-	unused: u32,
+	pub flags: OpenFlags,
+	pub unused: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseCreateIn {
-	flags: u32,
-	mode: u32,
-	umask: u32,
-	padding: u32,
+	pub flags: u32,
+	pub mode: u32,
+	pub umask: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseOpenOut {
-	fh: u64,
-	open_flags: OpenFlags,
-	padding: u32,
+	pub fh: u64,
+	pub open_flags: OpenFlags,
+	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseReleaseIn {
-	fh: u64,
-	flags: u32,
-	release_flags: ReleaseFlags,
-	lock_owner: u64,
+	pub fh: u64,
+	pub flags: u32,
+	pub release_flags: ReleaseFlags,
+	pub lock_owner: u64,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseFlushIn {
-	fh: u64,
-	unused: u32,
-	padding: u32,
-	lock_owner: u64,
+	pub fh: u64,
+	pub unused: u32,
+	pub padding: u32,
+	pub lock_owner: u64,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseReadIn {
-	fh: u64,
-	offset: u64,
-	size: u32,
-	read_flags: ReadFlags,
-	lock_owner: u64,
-	flags: u32,
-	padding: u32,
+	pub fh: u64,
+	pub offset: u64,
+	pub size: u32,
+	pub read_flags: ReadFlags,
+	pub lock_owner: u64,
+	pub flags: u32,
+	pub padding: u32,
 }
 
 const FUSE_COMPAT_WRITE_IN_SIZE: usize = 24;
@@ -633,20 +642,20 @@ const FUSE_COMPAT_WRITE_IN_SIZE: usize = 24;
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseWriteIn {
-	fh: u64,
-	offset: u64,
-	size: u32,
-	write_flags: WriteFlags,
-	lock_owner: u64,
-	flags: u32,
-	padding: u32,
+	pub fh: u64,
+	pub offset: u64,
+	pub size: u32,
+	pub write_flags: WriteFlags,
+	pub lock_owner: u64,
+	pub flags: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseWriteOut {
-	size: u32,
-	padding: u32,
+	pub size: u32,
+	pub padding: u32,
 }
 
 const FUSE_COMPAT_STATFS_SIZE: usize = 48;
@@ -660,53 +669,53 @@ pub struct FuseStatfsOut {
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseFsyncIn {
-	fh: u64,
-	fsync_flags: u32,
-	padding: u32,
+	pub fh: u64,
+	pub fsync_flags: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseSetxattrIn {
-	size: u32,
-	flags: u32,
+	pub size: u32,
+	pub flags: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseGetxattrIn {
-	size: u32,
-	padding: u32,
+	pub size: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseGetxattrOut {
-	size: u32,
-	padding: u32,
+	pub size: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseLkIn {
-	fh: u64,
-	owner: u64,
-	lk: FuseFileLock,
-	lk_flags: u32,
-	padding: u32,
+	pub fh: u64,
+	pub owner: u64,
+	pub lk: FuseFileLock,
+	pub lk_flags: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseLkOut {
-	lk: FuseFileLock,
+	pub lk: FuseFileLock,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseAccessIn {
-	mask: u32,
-	padding: u32,
+	pub mask: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
@@ -724,15 +733,15 @@ const FUSE_COMPAT_22_INIT_OUT_SIZE: usize = 24;
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseInitOut {
-	major: u32,
-	minor: u32,
-	max_readahead: u32,
-	flags: InitFlags,
-	max_background: u16,
-	congestion_threshold: u16,
-	max_write: u32,
-	time_gran: u32,
-	unused: [u32; 9],
+	pub major: u32,
+	pub minor: u32,
+	pub max_readahead: u32,
+	pub flags: InitFlags,
+	pub max_background: u16,
+	pub congestion_threshold: u16,
+	pub max_write: u32,
+	pub time_gran: u32,
+	pub unused: [u32; 9],
 }
 
 const CUSE_INIT_INFO_MAX: usize = 4096;
@@ -740,103 +749,103 @@ const CUSE_INIT_INFO_MAX: usize = 4096;
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct CuseInitIn {
-	major: u32,
-	minor: u32,
-	unused: u32,
-	flags: CuseInitFlags,
+	pub major: u32,
+	pub minor: u32,
+	pub unused: u32,
+	pub flags: CuseInitFlags,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct CuseInitOut {
-	major: u32,
-	minor: u32,
-	unused: u32,
-	flags: CuseInitFlags,
-	max_read: u32,
-	max_write: u32,
-	dev_major: u32,		/* chardev major */
-	dev_minor: u32,		/* chardev minor */
-	spare: [u32; 10],
+	pub major: u32,
+	pub minor: u32,
+	pub unused: u32,
+	pub flags: CuseInitFlags,
+	pub max_read: u32,
+	pub max_write: u32,
+	pub dev_major: u32,		/* chardev major */
+	pub dev_minor: u32,		/* chardev minor */
+	pub spare: [u32; 10],
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseInterruptIn {
-	unique: u64,
+	pub unique: u64,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseBmapIn {
-	block: u64,
-	blocksize: u32,
-	padding: u32,
+	pub block: u64,
+	pub blocksize: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseBmapOut {
-	block: u64,
+	pub block: u64,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseIoctlIn {
-	fh: u64,
-	flags: IoctlFlags,
-	cmd: u32,
-	arg: u64,
-	in_size: u32,
-	out_size: u32,
+	pub fh: u64,
+	pub flags: IoctlFlags,
+	pub cmd: u32,
+	pub arg: u64,
+	pub in_size: u32,
+	pub out_size: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseIoctlIovec {
-	base: u64,
-	len: u64,
+	pub base: u64,
+	pub len: u64,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseIoctlOut {
-	result: i32,
-	flags: IoctlFlags,
-	in_iovs: u32,
-	out_iovs: u32,
+	pub result: i32,
+	pub flags: IoctlFlags,
+	pub in_iovs: u32,
+	pub out_iovs: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FusePollIn {
-	fh: u64,
-	kh: u64,
-	flags: u32,
-	events: u32,
+	pub fh: u64,
+	pub kh: u64,
+	pub flags: u32,
+	pub events: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FusePollOut {
-	revents: u32,
-	padding: u32,
+	pub revents: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseNotifyPollWakeupOut {
-	kh: u64,
+	pub kh: u64,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseFallocateIn {
-	fh: u64,
-	offset: u64,
-	length: u64,
-	mode: u32,
-	padding: u32,
+	pub fh: u64,
+	pub offset: u64,
+	pub length: u64,
+	pub mode: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
@@ -855,19 +864,19 @@ pub struct FuseInHeader {
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseOutHeader {
-	len: u32,
-	error: i32,
-	unique: u64,
+	pub len: u32,
+	pub error: i32,
+	pub unique: u64,
 }
 
 // #[repr(C)]
 // #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseDirent {
-	ino: u64,
-	off: u64,
-	namelen: u32,
-	typ: u32, //TODO: type
-	name: [char], //TODO: char name[];
+	pub ino: u64,
+	pub off: u64,
+	pub namelen: u32,
+	pub typ: u32, //TODO: type
+	pub name: [char], //TODO: char name[];
 }
 
 // const FUSE_NAME_OFFSET: usize = offsetof(struct fuse_dirent, name);
@@ -877,8 +886,8 @@ pub struct FuseDirent {
 // 	FUSE_DIRENT_ALIGN(FUSE_NAME_OFFSET + (d)->namelen)
 
 struct FuseDirentplus {
-	entry_out: FuseEntryOut,
-	dirent: FuseDirent,
+	pub entry_out: FuseEntryOut,
+	pub dirent: FuseDirent,
 }
 
 // const FUSE_NAME_OFFSET_DIRENTPLUS: usize = \;
@@ -889,57 +898,57 @@ struct FuseDirentplus {
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseNotifyInvalInodeOut {
-	ino: u64,
-	off: i64,
-	len: i64,
+	pub ino: u64,
+	pub off: i64,
+	pub len: i64,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseNotifyInvalEntryOut {
-	parent: u64,
-	namelen: u32,
-	padding: u32,
+	pub parent: u64,
+	pub namelen: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseNotifyDeleteOut {
-	parent: u64,
-	child: u64,
-	namelen: u32,
-	padding: u32,
+	pub parent: u64,
+	pub child: u64,
+	pub namelen: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseNotifyStoreOut {
-	nodeid: u64,
-	offset: u64,
-	size: u32,
-	padding: u32,
+	pub nodeid: u64,
+	pub offset: u64,
+	pub size: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseNotifyRetrieveOut {
-	notify_unique: u64,
-	nodeid: u64,
-	offset: u64,
-	size: u32,
-	padding: u32,
+	pub notify_unique: u64,
+	pub nodeid: u64,
+	pub offset: u64,
+	pub size: u32,
+	pub padding: u32,
 }
 
 /* Matches the size of fuse_write_in */
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseNotifyRetrieveIn {
-	dummy1: u64,
-	offset: u64,
-	size: u32,
-	dummy2: u32,
-	dummy3: u64,
-	dummy4: u64,
+	pub dummy1: u64,
+	pub offset: u64,
+	pub size: u32,
+	pub dummy2: u32,
+	pub dummy3: u64,
+	pub dummy4: u64,
 }
 
 /* Device ioctls: */
@@ -948,15 +957,15 @@ pub struct FuseNotifyRetrieveIn {
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseLseekIn {
-	fh: u64,
-	offset: u64,
-	whence: u32,
-	padding: u32,
+	pub fh: u64,
+	pub offset: u64,
+	pub whence: u32,
+	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct FuseLseekOut {
-	offset: u64,
+	pub offset: u64,
 }
 

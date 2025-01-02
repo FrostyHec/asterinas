@@ -1,10 +1,10 @@
 use core::{hint::spin_loop};
 
-use alloc::{boxed::Box, string::String, sync::Arc};
+use alloc::{boxed::Box, sync::Arc};
 use log::debug;
 use ostd::{mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions, VmReader, VmWriter, PAGE_SIZE}, sync::SpinLock, Pod};
 
-use crate::{device::{fs::header::{FuseInHeader, FuseInitIn, FuseOpcode, FuseOutHeader, InitFlags}, VirtioDeviceError}, queue::VirtQueue, transport::{ConfigManager, VirtioTransport}};
+use crate::{device::{fs::header::{FuseInHeader, FuseInitIn, FuseOpcode, FuseOpenIn, FuseOutHeader, OpenFlags}, VirtioDeviceError}, queue::VirtQueue, transport::{ConfigManager, VirtioTransport}};
 
 use super::config::VirtioFileSystemConfig;
 
@@ -16,17 +16,13 @@ pub struct FileSystemDevice {
     request_queue: SpinLock<VirtQueue>,
 }
 
-fn len_into_dma(len: usize) -> DmaStreamSlice<DmaStream> {
-    let vm_segment = FrameAllocOptions::new((len-1) / PAGE_SIZE + 1).alloc_contiguous().unwrap();
+fn bytes_into_dma(bytes: &[u8], init: bool) -> DmaStreamSlice<DmaStream> {
+    let vm_segment = FrameAllocOptions::new(1).alloc_contiguous().unwrap();
     let stream = DmaStream::map(vm_segment, DmaDirection::Bidirectional, false).unwrap();
-    DmaStreamSlice::new(stream, 0, len)
-}
-
-fn bytes_into_dma(bytes: &[u8]) -> DmaStreamSlice<DmaStream> {
-    let vm_segment = FrameAllocOptions::new((bytes.len()-1) / PAGE_SIZE + 1).alloc_contiguous().unwrap();
-    let stream = DmaStream::map(vm_segment, DmaDirection::Bidirectional, false).unwrap();
-    let mut writer = stream.writer().unwrap();
-    writer.write(&mut VmReader::from(bytes));
+    if init {
+        let mut writer = stream.writer().unwrap();
+        writer.write(&mut VmReader::from(bytes));
+    }
     DmaStreamSlice::new(stream, 0, bytes.len())
 }
 
@@ -53,10 +49,11 @@ impl FileSystemDevice {
         }
         // Initalize virtqueues
         const QID_HIPRIO: u16 = 0;
-        const QID_REQUEST: u16 = 1;
+        const QID_REQUEST: u16 = 2;
         const QUEUE_SIZE: u16 = 64;
         let hiprio_queue =
             SpinLock::new(VirtQueue::new(QID_HIPRIO, QUEUE_SIZE, transport.as_mut()).unwrap());
+        // let new_queue: SpinLock<VirtQueue> = SpinLock::new(VirtQueue::new(1, 0, transport.as_mut()).unwrap());
         let request_queue =
             SpinLock::new(VirtQueue::new(QID_REQUEST, QUEUE_SIZE, transport.as_mut()).unwrap());
 
@@ -71,36 +68,34 @@ impl FileSystemDevice {
             len: (size_of::<FuseInHeader>() + size_of::<FuseInitIn>()) as u32, 
             opcode: FuseOpcode::FUSE_INIT as u32,
             unique: 0, 
-            nodeid: 0, 
-            uid: 0,
-            gid: 0, 
-            pid: 0,
+            nodeid: 1,
+            uid: 1,
+            gid: 1, 
+            pid: 1,
             padding: 0, 
         };
-        let in_init = FuseInitIn {
-            major: 7,
-            minor: 26,
-            max_readahead: 0,
-            flags: InitFlags::empty(),
+        let in_open = FuseOpenIn {
+            flags: OpenFlags::empty(),
+            unused: 0,
         };
         let out_header = FuseOutHeader::default();
-        let out_init = FuseInitIn::default();
-        let in_packet = [in_header.as_bytes(), in_init.as_bytes()].concat();
-        let mut out_packet = [out_header.as_bytes(), out_init.as_bytes()].concat();
+        let out_open = FuseOpenIn::default();
+        let in_packet = [in_header.as_bytes(), in_open.as_bytes()].concat();
+        let mut out_packet = [out_header.as_bytes(), out_open.as_bytes()].concat();
         let out_packet = out_packet.as_mut_slice();
 
-        device.fun(in_packet.as_slice(), out_packet);
+        device.request(in_packet.as_slice(), out_packet);
         
         debug!("{:?}", out_packet);
 
         Ok(())
     }
 
-    fn fun(&self, in_packet: &[u8], out_packet: &mut [u8]) -> usize {
+    fn request(&self, in_packet: &[u8], out_packet: &mut [u8]) -> usize {
         let mut queue = self.request_queue.disable_irq().lock();
         
-        let in_dma = bytes_into_dma(in_packet);
-        let out_dma = len_into_dma(out_packet.len());
+        let in_dma = bytes_into_dma(in_packet, true);
+        let out_dma = bytes_into_dma(out_packet, false);
         let token = queue
             .add_dma_buf(&[&in_dma], &[&out_dma])
             .expect("add queue failed");
@@ -112,7 +107,7 @@ impl FileSystemDevice {
         }
         queue.pop_used_with_token(token).expect("pop used failed");
         out_dma.sync().expect("sync failed");
-        out_dma.reader().expect("get reader error").read(  &mut VmWriter::from(out_packet))
+        out_dma.reader().expect("get reader error").read(&mut VmWriter::from(out_packet))
     }
 }
 
