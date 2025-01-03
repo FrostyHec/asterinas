@@ -4,7 +4,7 @@ use alloc::{boxed::Box, sync::Arc};
 use log::debug;
 use ostd::{mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions, VmReader, VmWriter, PAGE_SIZE}, sync::SpinLock, Pod};
 
-use crate::{device::{fs::header::{FuseInHeader, FuseInitIn, FuseOpcode, FuseOpenIn, FuseOutHeader, OpenFlags}, VirtioDeviceError}, queue::VirtQueue, transport::{ConfigManager, VirtioTransport}};
+use crate::{device::{fs::header::*, VirtioDeviceError}, queue::VirtQueue, transport::{ConfigManager, VirtioTransport}};
 
 use super::{config::VirtioFileSystemConfig, header::{FuseInPacket, FuseInPayload, FuseOutPacket}};
 
@@ -17,7 +17,7 @@ pub struct FileSystemDevice {
 }
 
 fn bytes_into_dma(bytes: &[u8], init: bool) -> DmaStreamSlice<DmaStream> {
-    let vm_segment = FrameAllocOptions::new(1).alloc_contiguous().unwrap();
+    let vm_segment = FrameAllocOptions::new((bytes.len()-1) / PAGE_SIZE + 1).alloc_contiguous().unwrap();
     let stream = DmaStream::map(vm_segment, DmaDirection::Bidirectional, false).unwrap();
     if init {
         let mut writer = stream.writer().unwrap();
@@ -49,11 +49,10 @@ impl FileSystemDevice {
         }
         // Initalize virtqueues
         const QID_HIPRIO: u16 = 0;
-        const QID_REQUEST: u16 = 2;
+        const QID_REQUEST: u16 = 1;
         const QUEUE_SIZE: u16 = 64;
         let hiprio_queue =
             SpinLock::new(VirtQueue::new(QID_HIPRIO, QUEUE_SIZE, transport.as_mut()).unwrap());
-        // let new_queue: SpinLock<VirtQueue> = SpinLock::new(VirtQueue::new(1, 0, transport.as_mut()).unwrap());
         let request_queue =
             SpinLock::new(VirtQueue::new(QID_REQUEST, QUEUE_SIZE, transport.as_mut()).unwrap());
 
@@ -67,7 +66,7 @@ impl FileSystemDevice {
         let out_packet = device.request(FuseInPacket {
             header: FuseInHeader { 
                 len: 0, opcode: 0, //will be filled automatically in request()
-                unique: 0, 
+                unique: 0,
                 nodeid: 1,
                 uid: 1,
                 gid: 1, 
@@ -109,7 +108,7 @@ impl FileSystemDevice {
         if queue.should_notify() {
             queue.notify();
         }
-        while !queue.can_pop() {
+        for _ in 0..10000 {
             spin_loop();
         }
         queue.pop_used_with_token(token).expect("pop used failed");
