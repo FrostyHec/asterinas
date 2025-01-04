@@ -1,0 +1,82 @@
+use core::hint::spin_loop;
+
+use alloc::{boxed::Box, sync::Arc};
+use aster_bigtcp::device;
+use log::debug;
+use ostd::{mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions, VmReader, VmWriter, PAGE_SIZE}, sync::SpinLock, Pod};
+
+use crate::{device::{crypto, VirtioDeviceError}, queue::VirtQueue, transport::{ConfigManager, VirtioTransport}};
+
+use super::{config::VirtioCryptoConfig};
+
+fn bytes_into_dma(bytes: &[u8], init: bool) -> DmaStreamSlice<DmaStream> {
+    let vm_segment = FrameAllocOptions::new((bytes.len()-1) / PAGE_SIZE + 1).alloc_contiguous().unwrap();
+    let stream = DmaStream::map(vm_segment, DmaDirection::Bidirectional, false).unwrap();
+    if init {
+        let mut writer = stream.writer().unwrap();
+        writer.write(&mut VmReader::from(bytes));
+    }
+    DmaStreamSlice::new(stream, 0, bytes.len())
+}
+
+pub struct CryptoDevice {
+    config_manager: ConfigManager<VirtioCryptoConfig>,
+    transport: SpinLock<Box<dyn VirtioTransport>>,
+
+    data_queue: SpinLock<VirtQueue>,
+    control_queue: SpinLock<VirtQueue>,
+}
+
+impl CryptoDevice {
+    pub fn negotiate_features(features: u64) -> u64 {
+        debug!("cypto features {:?}", features);
+        features
+    }
+
+    pub fn init(mut transport: Box<dyn VirtioTransport>) -> Result<(), VirtioDeviceError> {
+        let config_manager = VirtioCryptoConfig::new_manager(transport.as_ref());
+        let config = config_manager.read_config();
+        debug!("virtio_fs_config = {:?}", config);
+
+        const QUEUE_SIZE: u16 = 64;
+        let data_queue =
+            SpinLock::new(VirtQueue::new(0, QUEUE_SIZE, transport.as_mut()).unwrap());
+        let control_queue =
+            SpinLock::new(VirtQueue::new(config.max_dataqueues as u16, QUEUE_SIZE, transport.as_mut()).unwrap());
+
+        let device = CryptoDevice {
+            config_manager,
+            transport: SpinLock::new(transport),
+            data_queue,
+            control_queue,
+        };
+        device.transport.lock().finish_init();
+
+        let in_bytes = [0 as u8; 128];
+        let mut out_bytes = [0 as u8; 128];
+
+        device.request_by_bytes(&in_bytes, &mut out_bytes);
+        debug!("crypto output: {:?}", out_bytes);
+
+        Ok(())
+    }
+
+    fn request_by_bytes(&self, in_bytes: &[u8], out_bytes: &mut [u8]) -> usize {
+        let mut queue = self.data_queue.disable_irq().lock();
+
+        let in_dma = bytes_into_dma(in_bytes, true);
+        let out_dma = bytes_into_dma(out_bytes, false);
+        let token = queue
+            .add_dma_buf(&[&in_dma], &[&out_dma])
+            .expect("add queue failed");
+        if queue.should_notify() {
+            queue.notify();
+        }
+        for _ in 0..10000000 {
+            spin_loop();
+        }
+        queue.pop_used_with_token(token).expect("pop used failed");
+        out_dma.sync().expect("sync failed");
+        out_dma.reader().expect("get reader error").read(&mut VmWriter::from(out_bytes))
+    }
+}

@@ -10,6 +10,7 @@ pub mod input;
 pub mod network;
 pub mod socket;
 pub mod entropy;
+pub mod crypto;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, TryFromInt)]
 #[repr(u8)]

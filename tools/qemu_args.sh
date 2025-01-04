@@ -83,6 +83,8 @@ QEMU_ARGS="\
     -device virtio-serial-pci,disable-legacy=on,disable-modern=off$IOMMU_DEV_EXTRA \
     -device virtconsole,chardev=mux \
     -device virtio-rng \
+    -object cryptodev-backend-builtin,id=cryptodev0 \
+    -device virtio-crypto-pci,id=crypto0,cryptodev=cryptodev0 \
     $IOMMU_EXTRA_ARGS \
 "
 
