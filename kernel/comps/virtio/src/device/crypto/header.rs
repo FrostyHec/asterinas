@@ -155,6 +155,12 @@ macro_rules! variable_length_fields {
                     $($field,)*
                 }
             }
+            
+            fn fill_lengths(&self, packet: &mut $T) {
+                $(
+                    packet$(.$len)+ = self.$field.len() as u32;
+                )*
+            }
         }
 
     }
@@ -190,8 +196,9 @@ struct DestroySessionInput {
 
 struct HashCreateSessionFlf { 
     /* Device read only portion */ 
- 
-    pub para: HashPara, 
+
+    /* See HASH_* above */
+    pub algo: u32,
     /* hash result length */ 
     pub hash_result_len: u32, 
 }
@@ -218,10 +225,22 @@ variable_length_fields! {
 }
 
 #[allow(non_camel_case_types)]
+enum SymOp {
+    /* No operation */ 
+    SYM_OP_NONE = 0, 
+    /* Cipher only operation on the data */ 
+    SYM_OP_CIPHER = 1, 
+    /* Chain any cipher with any hash or mac operation. The order 
+    depends on the value of alg_chain_order param */ 
+    SYM_OP_ALGORITHM_CHAINING = 2, 
+}
+
+#[allow(non_camel_case_types)]
 enum CryptoOp {
     OP_ENCRYPT = 1, 
     OP_DECRYPT = 2, 
 }
+
 
 struct CipherPara {
     /* See CIPHER* above */ 
@@ -238,13 +257,22 @@ struct CipherSessionFlf {
     pub para: CipherPara,
     pub padding: u32, 
 }
- 
+const CIPHER_SESSION_FLF_PADDING_SIZE: usize = SYM_SESS_OP_SPEC_HDR_SIZE - size_of::<CipherSessionFlf>();
+
+struct SymCipherCreateSessionFlf {
+    pub op_flf: CipherSessionFlf,
+    pub padding_bytes: [u8; CIPHER_SESSION_FLF_PADDING_SIZE],
+
+    pub op_type: u32, //enum sym_op
+    pub padding: u32, 
+}
+
 variable_length_fields! {
-    struct CipherSessionVlf <= CipherSessionFlf { 
+    struct SymCipherCreateSessionVlf <= SymCipherCreateSessionFlf { 
         /* Device read only portion */ 
     
         /* The cipher key */ 
-        pub cipher_key: [u8; para, key_len], 
+        pub cipher_key: [u8; op_flf, para, key_len], 
     }
 }
 
@@ -266,6 +294,18 @@ enum SymHashMode {
 
 const ALG_CHAIN_SESS_OP_SPEC_HDR_SIZE: usize = 16; 
 
+struct AlgChainAlgoFlf {
+    /* Device read only portion */ 
+ 
+    /* See MAC_* or HASH_* above */ 
+    pub algo: u32, 
+    /* hash result length */ 
+    pub hash_result_len: u32, 
+    /* length of authenticated key */ 
+    pub auth_key_len: u32, 
+    pub padding: u32, 
+}
+
 struct AlgChainSessionFlf { 
     /* Device read only portion */ 
 
@@ -275,54 +315,51 @@ struct AlgChainSessionFlf {
     pub cipher_hdr: CipherSessionFlf,
  
     /* fixed length fields, algo specific */ 
-    // TODO: Mac or Hash
-    pub algo_flf: MacCreateSessionFlf, 
+    // pub algo_flf: [u8; VIRTIO_CRYPTO_ALG_CHAIN_SESS_OP_SPEC_HDR_SIZE],
+    pub algo_flf: AlgChainAlgoFlf, 
  
     /* length of the additional authenticated data (AAD) in bytes */ 
     pub aad_len: u32, 
+    pub padding: u32,
+}
+
+struct SymAlgChainCreateSessionFlf {
+    pub op_flf: AlgChainSessionFlf,
+
+    pub op_type: u32, //enum sym_op
     pub padding: u32, 
 }
 
 variable_length_fields!{
-    struct AlgChainSessionVlf <= AlgChainSessionFlf { 
+    struct SymAlgChainCreateSessionVlf <= SymAlgChainCreateSessionFlf { 
         /* Device read only portion */ 
     
         /* The cipher key */ 
-        pub cipher_key: [u8; cipher_hdr, para, key_len], 
+        pub cipher_key: [u8; op_flf, cipher_hdr, para, key_len], 
         /* The authenticated key */ 
-        pub auth_key: [u8; algo_flf, auth_key_len], 
+        pub auth_key: [u8; op_flf, algo_flf, auth_key_len], 
     }
 }
 
-const SYM_SESS_OP_SPEC_HDR_SIZE: usize = 48; 
-
-#[allow(non_camel_case_types)]
-enum SymOp {
-    /* No operation */ 
-    SYM_OP_NONE = 0, 
-    /* Cipher only operation on the data */ 
-    SYM_OP_CIPHER = 1, 
-    /* Chain any cipher with any hash or mac operation. The order 
-    depends on the value of alg_chain_order param */ 
-    SYM_OP_ALGORITHM_CHAINING = 2, 
-}
-
-struct SymCreateSessionFlf { 
-    /* Device read only portion */ 
+const SYM_SESS_OP_SPEC_HDR_SIZE: usize = 48;
+// Splited into SymCipherCreateSessionFlf & SymAlgChainCreateSessionFlf
+//
+// struct SymCreateSessionFlf { 
+//     /* Device read only portion */ 
  
-    /* fixed length fields, opcode specific */ 
-//      |cipher_session_flf
-//      |alg_chain_session_flf
-    pub op_flf: [u8; SYM_SESS_OP_SPEC_HDR_SIZE], 
+//     /* fixed length fields, opcode specific */ 
+// //      |cipher_session_flf
+// //      |alg_chain_session_flf
+//     pub op_flf: [u8; SYM_SESS_OP_SPEC_HDR_SIZE], 
  
-    pub op_type: u32, //snum sym_op
-    pub padding: u32, 
-}
+//     pub op_type: u32, //enum sym_op
+//     pub padding: u32, 
+// }
 
-// TODO:
-// struct sym_create_session_vlf = 
-//     |cipher_session_vlf
-//     |alg_chain_session_vlf
+// //
+// // struct sym_create_session_vlf = 
+// //     |cipher_session_vlf
+// //     |alg_chain_session_vlf
 
 struct AeadCreateSessionFlf { 
     /* Device read only portion */ 
@@ -342,8 +379,8 @@ struct AeadCreateSessionFlf {
 
 variable_length_fields! {
     struct AeadCreateSessionVlf <= AeadCreateSessionFlf { 
-    /* Device read only portion */ 
-    pub key: [u8; key_len], 
+        /* Device read only portion */ 
+        pub key: [u8; key_len], 
     }
 }
 
@@ -359,8 +396,8 @@ struct AkcipherCreateSessionFlf {
     /* Device read only portion */ 
  
     /* See AKCIPHER_* above */ 
-    pub algo: u32, //enum AKCIPHER_KeyType
-    pub key_type: u32, 
+    pub algo: u32, 
+    pub key_type: u32, //enum AKCIPHER_KeyType
     /* length of key */ 
     pub key_len: u32, 
  
@@ -368,7 +405,7 @@ struct AkcipherCreateSessionFlf {
 }
 
 variable_length_fields! {
-    struct AkcipherCreateSessionVlf <=  AkcipherCreateSessionFlf { 
+    struct AkcipherCreateSessionVlf <= AkcipherCreateSessionFlf { 
         /* Device read only portion */ 
         pub key: [u8; key_len], 
     }
@@ -432,13 +469,9 @@ variable_length_fields! {
     }
 }
 
-struct HashPara {
+struct HashDataFlfStateless { 
     /* See HASH_* above */
     pub algo: u32,
-}
-
-struct HashDataFlfStateless { 
-    pub para: HashPara,
     /* length of source data */ 
     pub src_data_len: u32, 
     /* hash result length */ 
@@ -519,9 +552,19 @@ struct CipherDataFlf {
     pub dst_data_len: u32, 
     pub padding: u32, 
 }
+const CIPHER_DATA_FLF_PADDING_SIZE: usize = SYM_DATA_REQ_HDR_SIZE - size_of::<CipherDataFlf>();
+
+struct SymCipherDataFlf {
+    pub op_type_flf: CipherDataFlf,
+    pub padding_bytes: [u8; CIPHER_DATA_FLF_PADDING_SIZE], 
+ 
+    /* See above SYM_OP_* */ 
+    pub op_type: u32, 
+    pub padding: u32, 
+}
  
 variable_length_fields! {
-    struct CipherDataVlf <= CipherDataFlf { 
+    struct SymCipherDataVlf <= SymCipherDataFlf { 
         /* Device read only portion */ 
     
         /* 
@@ -536,13 +579,13 @@ variable_length_fields! {
         * The IV/Counter will be updated after every partial cryptographic 
         * operation. 
         */ 
-        pub iv: [u8; iv_len], 
+        pub iv: [u8; op_type_flf, iv_len], 
         /* Source data */ 
-        pub src_data: [u8; src_data_len], 
+        pub src_data: [u8; op_type_flf, src_data_len], 
     
         /* Device write only portion */ 
         /* Destination data */ 
-        pub dst_data: [u8; dst_data_len], 
+        pub dst_data: [u8; op_type_flf, dst_data_len], 
     }
 }
 
@@ -567,43 +610,50 @@ struct AlgChainDataFlf {
     pub reserved: u32, 
 }
 
-
-variable_length_fields! { 
-    struct AlgChainDataVlf <= AlgChainDataFlf { 
-        /* Device read only portion */ 
-    
-        /* Initialization Vector or Counter data */ 
-        pub iv: [u8; iv_len], 
-        /* Source data */ 
-        pub src_data: [u8; src_data_len], 
-        /* Additional authenticated data if exists */ 
-        pub aad: [u8; aad_len], 
-    
-        /* Device write only portion */ 
-    
-        /* Destination data */ 
-        pub dst_data: [u8; dst_data_len], 
-        /* Hash result data */ 
-        pub hash_result: [u8; hash_result_len], 
-    }
-}
-
-const SYM_DATA_REQ_HDR_SIZE: usize = 40;
-
-struct SymDataFlf { 
-    /* Device read only portion */ 
- 
-    pub op_type_flf: [u8; SYM_DATA_REQ_HDR_SIZE], 
+struct SymAlgChainDataFlf {
+    pub op_type_flf: AlgChainDataFlf,
  
     /* See above SYM_OP_* */ 
     pub op_type: u32, 
     pub padding: u32, 
 }
+
+variable_length_fields! { 
+    struct SymAlgChainDataVlf <= SymAlgChainDataFlf { 
+        /* Device read only portion */ 
+    
+        /* Initialization Vector or Counter data */ 
+        pub iv: [u8; op_type_flf, iv_len], 
+        /* Source data */ 
+        pub src_data: [u8; op_type_flf, src_data_len], 
+        /* Additional authenticated data if exists */ 
+        pub aad: [u8; op_type_flf, aad_len], 
+    
+        /* Device write only portion */ 
+    
+        /* Destination data */ 
+        pub dst_data: [u8; op_type_flf, dst_data_len], 
+        /* Hash result data */ 
+        pub hash_result: [u8; op_type_flf, hash_result_len], 
+    }
+}
+
+const SYM_DATA_REQ_HDR_SIZE: usize = 40;
+// Splited into SymCipherDataFlf & SymAlgChainDataFlf
+// struct SymDataFlf { 
+//     /* Device read only portion */ 
+//     // virtio_crypto_cipher_data_flf | virtio_crypto_alg_chain_data_flf
+//     pub op_type_flf: [u8; SYM_DATA_REQ_HDR_SIZE], 
  
-// TODO: similar to sym_create_session_vlf
-// struct sym_data_vlf { 
-//     pub op_type_vlf: [u8; sym_para_len], 
+//     /* See above SYM_OP_* */ 
+//     pub op_type: u32, 
+//     pub padding: u32, 
 // }
+ 
+// // virtio_crypto_cipher_data_vlf | virtio_crypto_alg_chain_data_vlf
+// // struct sym_data_vlf { 
+// //     pub op_type_vlf: [u8; sym_para_len], 
+// // }
 
 struct CipherDataFlfStateless { 
     pub para: CipherPara,
@@ -616,22 +666,34 @@ struct CipherDataFlfStateless {
     /* length of destination data */ 
     pub dst_data_len: u32, 
 }
+const CIPHER_DATA_FLF_STATELESS_PADDING_SIZE: usize = 
+    SYM_DATE_REQ_HDR_STATELESS_SIZE - size_of::<CipherDataFlfStateless>();
+
+struct SymCipherDataFlfStateless {
+    /* Device read only portion */
+    pub op_type_flf: CipherDataFlfStateless,
+    pub padding_bytes: [u8; CIPHER_DATA_FLF_STATELESS_PADDING_SIZE],
+
+    /* Device write only portion */ 
+    /* See above SYM_OP_* */ 
+    pub op_type: u32,
+}
  
 variable_length_fields! {
-    struct CipherDataVlfStateless <= CipherDataFlfStateless { 
+    struct SymCipherDataVlfStateless <= SymCipherDataFlfStateless { 
         /* Device read only portion */ 
     
         /* The cipher key */ 
-        pub cipher_key: [u8; para, key_len], 
+        pub cipher_key: [u8; op_type_flf, para, key_len], 
     
         /* Initialization Vector or Counter data. */ 
-        pub iv: [u8; iv_len], 
+        pub iv: [u8; op_type_flf, iv_len], 
         /* Source data */ 
-        pub src_data: [u8; src_data_len], 
+        pub src_data: [u8; op_type_flf, src_data_len], 
     
         /* Device write only portion */ 
         /* Destination data */ 
-        pub dst_data: [u8; dst_data_len], 
+        pub dst_data: [u8; op_type_flf, dst_data_len], 
     }
 }
 
@@ -676,47 +738,57 @@ struct AlgChainDataFlfStateless {
     pub reserved: u32, 
 }
 
+struct SymAlgChainDataFlfStateless {
+    /* Device read only portion */
+    pub op_type_flf: AlgChainDataFlfStateless,
+
+    /* Device write only portion */ 
+    /* See above SYM_OP_* */ 
+    pub op_type: u32,
+}
+
 variable_length_fields! {
-    struct AlgChainDataVlfStateless <= AlgChainDataFlfStateless { 
+    struct SymAlgChainDataVlfStateless <= SymAlgChainDataFlfStateless { 
         /* Device read only portion */ 
     
         /* The cipher key */ 
-        pub cipher_key: [u8; para, cipher_para, key_len], 
+        pub cipher_key: [u8; op_type_flf, para, cipher_para, key_len], 
         /* The auth key */ 
-        pub auth_key: [u8; para, auth_key_len], 
+        pub auth_key: [u8; op_type_flf, para, auth_key_len], 
         /* Initialization Vector or Counter data */ 
-        pub iv: [u8; iv_len], 
+        pub iv: [u8; op_type_flf, iv_len], 
         /* Additional authenticated data if exists */ 
-        pub aad: [u8; aad_len], 
+        pub aad: [u8; op_type_flf, aad_len], 
         /* Source data */ 
-        pub src_data: [u8; src_data_len], 
+        pub src_data: [u8; op_type_flf, src_data_len], 
     
         /* Device write only portion */ 
     
         /* Destination data */ 
-        pub dst_data: [u8; dst_data_len], 
+        pub dst_data: [u8; op_type_flf, dst_data_len], 
         /* Hash result data */ 
-        pub hash_result: [u8; hash_result_len], 
+        pub hash_result: [u8; op_type_flf, hash_result_len], 
     }
 }
 
 const SYM_DATE_REQ_HDR_STATELESS_SIZE: usize = 72; 
+// Splited into SymCipherDataFlfStateless & SymAlgChainDataFlfStateless
+//
+// struct SymDataFlfStateless { 
+//     /* Device read only portion */
 
-struct SymDataFlfStateless { 
-    /* Device read only portion */
-
-    //TODO: cipher_data_flf_stateless | alg_chain_data_flf_stateless
-    pub op_type_flf: [u8; SYM_DATE_REQ_HDR_STATELESS_SIZE], 
+//     //cipher_data_flf_stateless | alg_chain_data_flf_stateless
+//     pub op_type_flf: [u8; SYM_DATE_REQ_HDR_STATELESS_SIZE], 
  
-    /* Device write only portion */ 
-    /* See above SYM_OP_* */ 
-    pub op_type: u32, 
-}
- 
-//TODO: cipher_data_vlf_stateless | alg_chain_data_vlf_stateless
-// struct sym_data_vlf_stateless { 
-//     pub op_type_vlf: [u8; sym_para_len], 
+//     /* Device write only portion */ 
+//     /* See above SYM_OP_* */ 
+//     pub op_type: u32, 
 // }
+ 
+// //cipher_data_vlf_stateless | alg_chain_data_vlf_stateless
+// // struct sym_data_vlf_stateless { 
+// //     pub op_type_vlf: [u8; sym_para_len], 
+// // }
 
 struct AeadDataFlf { 
     /* 
