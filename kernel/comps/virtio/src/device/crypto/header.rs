@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 #[allow(non_camel_case_types)]
 enum ServiceCode {
     /*CIPHER (Symmetric Key Cipher) service*/
@@ -96,31 +98,66 @@ enum Status {
     MAX
 }
 
-const fn virtio_crypto_opcode(service: ServiceCode, op: isize) -> isize {
+const fn opcode(service: ServiceCode, op: isize) -> isize {
     ((service as isize) << 8) | op
 }
 #[allow(non_camel_case_types)]
 enum ControlOpcode {
     CIPHER_CREATE_SESSION =
-        virtio_crypto_opcode(ServiceCode::CIPHER, 0x02),
+        opcode(ServiceCode::CIPHER, 0x02),
     CIPHER_DESTROY_SESSION =
-        virtio_crypto_opcode(ServiceCode::CIPHER, 0x03),
+        opcode(ServiceCode::CIPHER, 0x03),
     HASH_CREATE_SESSION =
-        virtio_crypto_opcode(ServiceCode::HASH, 0x02),
+        opcode(ServiceCode::HASH, 0x02),
     HASH_DESTROY_SESSION =
-        virtio_crypto_opcode(ServiceCode::HASH, 0x03),
+        opcode(ServiceCode::HASH, 0x03),
     MAC_CREATE_SESSION =
-        virtio_crypto_opcode(ServiceCode::MAC, 0x02),
+        opcode(ServiceCode::MAC, 0x02),
     MAC_DESTROY_SESSION =
-        virtio_crypto_opcode(ServiceCode::MAC, 0x03),
+        opcode(ServiceCode::MAC, 0x03),
     AEAD_CREATE_SESSION =
-        virtio_crypto_opcode(ServiceCode::AEAD, 0x02),
+        opcode(ServiceCode::AEAD, 0x02),
     AEAD_DESTROY_SESSION =
-        virtio_crypto_opcode(ServiceCode::AEAD, 0x03),
+        opcode(ServiceCode::AEAD, 0x03),
     AKCIPHER_CREATE_SESSION =
-        virtio_crypto_opcode(ServiceCode::AKCIPHER, 0x04),
+        opcode(ServiceCode::AKCIPHER, 0x04),
     AKCIPHER_DESTROY_SESSION =
-        virtio_crypto_opcode(ServiceCode::AKCIPHER, 0x05),
+        opcode(ServiceCode::AKCIPHER, 0x05),
+}
+
+macro_rules! variable_length_fields {
+    (
+        $(#[$outer:meta])*
+        $vis:vis struct $StructName:ident <= $T:ty {
+            $(
+                $(#[$inner:ident $($args:tt)*])*
+                $fvis:vis $field:ident: [u8; $($len:ident),+],
+            )*
+        }
+    ) => {
+        $(#[$outer])*
+        $vis struct $StructName {
+            $(
+                $fvis $field: Vec<u8>,
+            )*
+        }
+
+        impl $StructName {
+            #[allow(unused_assignments)]
+            fn from_bytes(bytes: &[u8], packet: $T) -> Self {
+                let mut begin: usize = 0;
+                $(
+                    let len = packet$(.$len)+ as usize;
+                    let $field = bytes[begin..begin+len].to_vec();
+                    begin += len;
+                )*
+                $StructName {
+                    $($field,)*
+                }
+            }
+        }
+
+    }
 }
 
 //
@@ -135,32 +172,31 @@ struct ControlHeader {
     pub reserved: u32,
 }
 
-struct virtio_crypto_create_session_input { 
+struct create_session_input { 
     pub session_id: u64, 
     pub status: u32, 
     pub padding: u32, 
 }
 
-struct virtio_crypto_destroy_session_flf { 
+struct destroy_session_flf { 
     /* Device read only portion */ 
     pub session_id: u64, 
 }
  
-struct virtio_crypto_destroy_session_input { 
+struct destroy_session_input { 
     /* Device write only portion */ 
     pub status: u8, 
 }
 
-struct virtio_crypto_hash_create_session_flf { 
+struct hash_create_session_flf { 
     /* Device read only portion */ 
  
-    /* See VIRTIO_CRYPTO_HASH_* above */ 
-    pub algo: u32, 
+    pub para: HashPara, 
     /* hash result length */ 
     pub hash_result_len: u32, 
 }
 
-struct virtio_crypto_mac_create_session_flf { 
+struct mac_create_session_flf { 
     /* Device read only portion */ 
  
     /* See VIRTIO_CRYPTO_MAC_* above */ 
@@ -171,12 +207,14 @@ struct virtio_crypto_mac_create_session_flf {
     pub auth_key_len: u32, 
     pub padding: u32, 
 }
- 
-struct virtio_crypto_mac_create_session_vlf { 
-    /* Device read only portion */ 
- 
-    /* The authenticated key */ 
-    pub auth_key: [u8; auth_key_len], 
+
+variable_length_fields! {
+    struct mac_create_session_vlf <= mac_create_session_flf { 
+        /* Device read only portion */ 
+     
+        /* The authenticated key */ 
+        pub auth_key: [u8; auth_key_len], 
+    }
 }
 
 enum CryptoOp {
@@ -184,7 +222,7 @@ enum CryptoOp {
     VIRTIO_CRYPTO_OP_DECRYPT = 2, 
 }
 
-struct CipherParas {
+struct CipherPara {
     /* See VIRTIO_CRYPTO_CIPHER* above */ 
     pub algo: u32, 
     /* length of key */ 
@@ -194,17 +232,19 @@ struct CipherParas {
     pub op: u32, //enum CRYPTO_OP
 }
 
-struct virtio_crypto_cipher_session_flf { 
+struct cipher_session_flf { 
     /* Device read only portion */ 
-    pub paras: CipherParas,
+    pub para: CipherPara,
     pub padding: u32, 
 }
  
-struct virtio_crypto_cipher_session_vlf { 
-    /* Device read only portion */ 
- 
-    /* The cipher key */ 
-    pub cipher_key: [u8; key_len], 
+variable_length_fields! {
+    struct cipher_session_vlf <= cipher_session_flf { 
+        /* Device read only portion */ 
+    
+        /* The cipher key */ 
+        pub cipher_key: [u8; para, key_len], 
+    }
 }
 
 enum alg_chain_order {
@@ -223,29 +263,32 @@ enum sym_hash_mode {
 
 const VIRTIO_CRYPTO_ALG_CHAIN_SESS_OP_SPEC_HDR_SIZE: usize = 16; 
 
-struct virtio_crypto_alg_chain_session_flf { 
+struct alg_chain_session_flf { 
     /* Device read only portion */ 
 
     pub alg_chain_order: u32, //enum alg_chain_order
 
     pub hash_mode: u32, //enum sym_hash_mode
-    pub cipher_hdr: virtio_crypto_cipher_session_flf,
+    pub cipher_hdr: cipher_session_flf,
  
     /* fixed length fields, algo specific */ 
-    pub algo_flf: [u8; VIRTIO_CRYPTO_ALG_CHAIN_SESS_OP_SPEC_HDR_SIZE], 
+    // TODO: Mac or Hash
+    pub algo_flf: mac_create_session_flf, 
  
     /* length of the additional authenticated data (AAD) in bytes */ 
     pub aad_len: u32, 
     pub padding: u32, 
 }
- 
-struct virtio_crypto_alg_chain_session_vlf { 
-    /* Device read only portion */ 
- 
-    /* The cipher key */ 
-    pub cipher_key: [u8; key_len], 
-    /* The authenticated key */ 
-    pub auth_key: [u8; auth_key_len], 
+
+variable_length_fields!{
+    struct alg_chain_session_vlf <= alg_chain_session_flf { 
+        /* Device read only portion */ 
+    
+        /* The cipher key */ 
+        pub cipher_key: [u8; cipher_hdr, para, key_len], 
+        /* The authenticated key */ 
+        pub auth_key: [u8; algo_flf, auth_key_len], 
+    }
 }
 
 const VIRTIO_CRYPTO_SYM_SESS_OP_SPEC_HDR_SIZE: usize = 48; 
@@ -260,23 +303,24 @@ enum sym_op {
     VIRTIO_CRYPTO_SYM_OP_ALGORITHM_CHAINING = 2, 
 }
 
-struct virtio_crypto_sym_create_session_flf { 
+struct sym_create_session_flf { 
     /* Device read only portion */ 
  
     /* fixed length fields, opcode specific */ 
+//      |cipher_session_flf
+//      |alg_chain_session_flf
     pub op_flf: [u8; VIRTIO_CRYPTO_SYM_SESS_OP_SPEC_HDR_SIZE], 
  
     pub op_type: u32, //snum sym_op
     pub padding: u32, 
 }
 
-struct virtio_crypto_sym_create_session_vlf { 
-    /* Device read only portion */ 
-    /* variable length fields, opcode specific */ 
-    pub op_vlf: [u8; vlf_len], 
-}
+// TODO:
+// struct sym_create_session_vlf = 
+//     |cipher_session_vlf
+//     |alg_chain_session_vlf
 
-struct virtio_crypto_aead_create_session_flf { 
+struct aead_create_session_flf { 
     /* Device read only portion */ 
  
     /* See VIRTIO_CRYPTO_AEAD_* above */ 
@@ -291,47 +335,12 @@ struct virtio_crypto_aead_create_session_flf {
     pub op: u32, 
     pub padding: u32, 
 }
- 
-struct virtio_crypto_aead_create_session_vlf { 
+
+variable_length_fields! {
+    struct aead_create_session_vlf <= aead_create_session_flf { 
     /* Device read only portion */ 
     pub key: [u8; key_len], 
-}
-
-enum RsaPaddingAlgo {
-    VIRTIO_CRYPTO_RSA_RAW_PADDING = 0, 
-    VIRTIO_CRYPTO_RSA_PKCS1_PADDING = 1, 
-}
-
-enum RsaHashAlgo {
-    VIRTIO_CRYPTO_RSA_NO_HASH = 0, 
-    VIRTIO_CRYPTO_RSA_MD2 = 1, 
-    VIRTIO_CRYPTO_RSA_MD3 = 2, 
-    VIRTIO_CRYPTO_RSA_MD4 = 3, 
-    VIRTIO_CRYPTO_RSA_MD5 = 4, 
-    VIRTIO_CRYPTO_RSA_SHA1 = 5, 
-    VIRTIO_CRYPTO_RSA_SHA256 = 6, 
-    VIRTIO_CRYPTO_RSA_SHA384 = 7, 
-    VIRTIO_CRYPTO_RSA_SHA512 = 8, 
-    VIRTIO_CRYPTO_RSA_SHA224 = 9, 
-}
-
-struct virtio_crypto_rsa_session_para { 
-    pub padding_algo: u32, //enum RsaPaddingAlgo
-    pub hash_algo: u32, //enum RsaHashAlgo
-}
-
-enum CurveType {
-    VIRTIO_CRYPTO_CURVE_UNKNOWN = 0, 
-    VIRTIO_CRYPTO_CURVE_NIST_P192 = 1, 
-    VIRTIO_CRYPTO_CURVE_NIST_P224 = 2, 
-    VIRTIO_CRYPTO_CURVE_NIST_P256 = 3, 
-    VIRTIO_CRYPTO_CURVE_NIST_P384 = 4, 
-    VIRTIO_CRYPTO_CURVE_NIST_P521 = 5,
-}
-
-struct virtio_crypto_ecdsa_session_para { 
-    /* See VIRTIO_CRYPTO_CURVE_* above */ 
-    pub curve_id: u32, //enum CurveType
+    }
 }
 
 enum AkcipherKeyType {
@@ -341,7 +350,7 @@ enum AkcipherKeyType {
 
 const VIRTIO_CRYPTO_AKCIPHER_SESS_ALGO_SPEC_HDR_SIZE: usize = 44; 
 
-struct virtio_crypto_akcipher_create_session_flf { 
+struct akcipher_create_session_flf { 
     /* Device read only portion */ 
  
     /* See VIRTIO_CRYPTO_AKCIPHER_* above */ 
@@ -352,10 +361,12 @@ struct virtio_crypto_akcipher_create_session_flf {
  
     pub algo_flf: [u8; VIRTIO_CRYPTO_AKCIPHER_SESS_ALGO_SPEC_HDR_SIZE], 
 }
- 
-struct virtio_crypto_akcipher_create_session_vlf { 
-    /* Device read only portion */ 
-    pub key: [u8; key_len], 
+
+variable_length_fields! {
+    struct akcipher_create_session_vlf <=  akcipher_create_session_flf { 
+        /* Device read only portion */ 
+        pub key: [u8; key_len], 
+    }
 }
 
 //
@@ -364,28 +375,28 @@ struct virtio_crypto_akcipher_create_session_vlf {
 
 enum DataOpcode {
     VIRTIO_CRYPTO_CIPHER_ENCRYPT = 
-        virtio_crypto_opcode(ServiceCode::CIPHER, 0x00),
+        opcode(ServiceCode::CIPHER, 0x00),
     VIRTIO_CRYPTO_CIPHER_DECRYPT = 
-        virtio_crypto_opcode(ServiceCode::CIPHER, 0x01),
+        opcode(ServiceCode::CIPHER, 0x01),
     VIRTIO_CRYPTO_HASH = 
-        virtio_crypto_opcode(ServiceCode::HASH, 0x00),
+        opcode(ServiceCode::HASH, 0x00),
     VIRTIO_CRYPTO_MAC = 
-        virtio_crypto_opcode(ServiceCode::MAC, 0x00),
+        opcode(ServiceCode::MAC, 0x00),
     VIRTIO_CRYPTO_AEAD_ENCRYPT = 
-        virtio_crypto_opcode(ServiceCode::AEAD, 0x00),
+        opcode(ServiceCode::AEAD, 0x00),
     VIRTIO_CRYPTO_AEAD_DECRYPT = 
-        virtio_crypto_opcode(ServiceCode::AEAD, 0x01),
+        opcode(ServiceCode::AEAD, 0x01),
     VIRTIO_CRYPTO_AKCIPHER_ENCRYPT = 
-        virtio_crypto_opcode(ServiceCode::AKCIPHER, 0x00),
+        opcode(ServiceCode::AKCIPHER, 0x00),
     VIRTIO_CRYPTO_AKCIPHER_DECRYPT = 
-        virtio_crypto_opcode(ServiceCode::AKCIPHER, 0x01),
+        opcode(ServiceCode::AKCIPHER, 0x01),
     VIRTIO_CRYPTO_AKCIPHER_SIGN = 
-        virtio_crypto_opcode(ServiceCode::AKCIPHER, 0x02),
+        opcode(ServiceCode::AKCIPHER, 0x02),
     VIRTIO_CRYPTO_AKCIPHER_VERIFY = 
-        virtio_crypto_opcode(ServiceCode::AKCIPHER, 0x03),
+        opcode(ServiceCode::AKCIPHER, 0x03),
 }
 
-struct virtio_crypto_op_header { 
+struct op_header { 
     pub opcode: u32, //enum DataOpcode
     /* algo should be service-specific algorithms */ 
     pub algo: u32, 
@@ -396,60 +407,68 @@ struct virtio_crypto_op_header {
     pub padding: u32, 
 }
 
-struct virtio_crypto_hash_data_flf { 
+struct hash_data_flf { 
     /* length of source data */ 
     pub src_data_len: u32, 
     /* hash result length */ 
     pub hash_result_len: u32, 
 }
- 
-struct virtio_crypto_hash_data_vlf { 
-    /* Device read only portion */ 
-    /* Source data */ 
-    pub src_data: [u8; src_data_len], 
- 
-    /* Device write only portion */ 
-    /* Hash result data */ 
-    pub hash_result: [u8; hash_result_len], 
+
+variable_length_fields! {
+    struct hash_data_vlf <= hash_data_flf { 
+        /* Device read only portion */ 
+        /* Source data */ 
+        pub src_data: [u8; src_data_len], 
+    
+        /* Device write only portion */ 
+        /* Hash result data */ 
+        pub hash_result: [u8; hash_result_len],
+    }
 }
 
-struct virtio_crypto_hash_data_flf_stateless { 
-    // struct { 
-        /* See VIRTIO_CRYPTO_HASH_* above */ 
-        pub algo: u32, 
-    // }sess_para; 
- 
+struct HashPara {
+    /* See VIRTIO_CRYPTO_HASH_* above */
+    pub algo: u32,
+}
+
+struct hash_data_flf_stateless { 
+    pub para: HashPara,
     /* length of source data */ 
     pub src_data_len: u32, 
     /* hash result length */ 
     pub hash_result_len: u32, 
     pub reserved: u32, 
 }
-struct virtio_crypto_hash_data_vlf_stateless { 
-    /* Device read only portion */ 
-    /* Source data */ 
-    pub src_data: [u8; src_data_len], 
- 
-    /* Device write only portion */ 
-    /* Hash result data */ 
-    pub hash_result: [u8; hash_result_len], 
+
+variable_length_fields! {
+    struct hash_data_vlf_stateless <= hash_data_flf_stateless { 
+        /* Device read only portion */ 
+        /* Source data */ 
+        pub src_data: [u8; src_data_len], 
+    
+        /* Device write only portion */ 
+        /* Hash result data */ 
+        pub hash_result: [u8; hash_result_len], 
+    }
 }
 
-struct virtio_crypto_mac_data_flf { 
-    pub hdr: virtio_crypto_hash_data_flf, 
+struct mac_data_flf { 
+    pub hdr: hash_data_flf, 
 }
  
-struct virtio_crypto_mac_data_vlf { 
-    /* Device read only portion */ 
-    /* Source data */ 
-    pub src_data: [u8; src_data_len], 
- 
-    /* Device write only portion */ 
-    /* Hash result data */ 
-    pub hash_result: [u8; hash_result_len], 
+variable_length_fields! {
+    struct mac_data_vlf <= mac_data_flf  { 
+        /* Device read only portion */ 
+        /* Source data */ 
+        pub src_data: [u8; hdr, src_data_len], 
+    
+        /* Device write only portion */ 
+        /* Hash result data */ 
+        pub hash_result: [u8; hdr, hash_result_len], 
+    }
 }
 
-struct virtio_crypto_mac_data_flf_stateless { 
+struct mac_data_flf_stateless { 
     // struct { 
         /* See VIRTIO_CRYPTO_MAC_* above */ 
         pub algo: u32, 
@@ -462,20 +481,22 @@ struct virtio_crypto_mac_data_flf_stateless {
     /* hash result length */ 
     pub hash_result_len: u32, 
 }
- 
-struct virtio_crypto_mac_data_vlf_stateless { 
-    /* Device read only portion */ 
-    /* The authenticated key */ 
-    pub auth_key: [u8; auth_key_len], 
-    /* Source data */ 
-    pub src_data: [u8; src_data_len], 
- 
-    /* Device write only portion */ 
-    /* Hash result data */ 
-    pub hash_result: [u8; hash_result_len], 
+
+variable_length_fields! {
+    struct mac_data_vlf_stateless <= mac_data_flf_stateless { 
+        /* Device read only portion */ 
+        /* The authenticated key */ 
+        pub auth_key: [u8; auth_key_len], 
+        /* Source data */ 
+        pub src_data: [u8; src_data_len], 
+    
+        /* Device write only portion */ 
+        /* Hash result data */ 
+        pub hash_result: [u8; hash_result_len], 
+    }
 }
 
-struct virtio_crypto_cipher_data_flf { 
+struct cipher_data_flf { 
     /* 
      * Byte Length of valid IV/Counter data pointed to by the below iv data. 
      * 
@@ -493,31 +514,33 @@ struct virtio_crypto_cipher_data_flf {
     pub padding: u32, 
 }
  
-struct virtio_crypto_cipher_data_vlf { 
-    /* Device read only portion */ 
- 
-    /* 
-     * Initialization Vector or Counter data. 
-     * 
-     * For block ciphers in CBC or F8 mode, or for Kasumi in F8 mode, or for 
-     *   SNOW3G in UEA2 mode, this is the Initialization Vector (IV) 
-     *   value. 
-     * For block ciphers in CTR mode, this is the counter. 
-     * For AES-XTS, this is the 128bit tweak, i, from IEEE Std 1619-2007. 
-     * 
-     * The IV/Counter will be updated after every partial cryptographic 
-     * operation. 
-     */ 
-    pub iv: [u8; iv_len], 
-    /* Source data */ 
-    pub src_data: [u8; src_data_len], 
- 
-    /* Device write only portion */ 
-    /* Destination data */ 
-    pub dst_data: [u8; dst_data_len], 
+variable_length_fields! {
+    struct cipher_data_vlf <= cipher_data_flf { 
+        /* Device read only portion */ 
+    
+        /* 
+        * Initialization Vector or Counter data. 
+        * 
+        * For block ciphers in CBC or F8 mode, or for Kasumi in F8 mode, or for 
+        *   SNOW3G in UEA2 mode, this is the Initialization Vector (IV) 
+        *   value. 
+        * For block ciphers in CTR mode, this is the counter. 
+        * For AES-XTS, this is the 128bit tweak, i, from IEEE Std 1619-2007. 
+        * 
+        * The IV/Counter will be updated after every partial cryptographic 
+        * operation. 
+        */ 
+        pub iv: [u8; iv_len], 
+        /* Source data */ 
+        pub src_data: [u8; src_data_len], 
+    
+        /* Device write only portion */ 
+        /* Destination data */ 
+        pub dst_data: [u8; dst_data_len], 
+    }
 }
 
-struct virtio_crypto_alg_chain_data_flf { 
+struct alg_chain_data_flf { 
     pub iv_len: u32, 
     /* Length of source data */ 
     pub src_data_len: u32, 
@@ -537,28 +560,31 @@ struct virtio_crypto_alg_chain_data_flf {
     pub hash_result_len: u32, 
     pub reserved: u32, 
 }
- 
-struct virtio_crypto_alg_chain_data_vlf { 
-    /* Device read only portion */ 
- 
-    /* Initialization Vector or Counter data */ 
-    pub iv: [u8; iv_len], 
-    /* Source data */ 
-    pub src_data: [u8; src_data_len], 
-    /* Additional authenticated data if exists */ 
-    pub aad: [u8; aad_len], 
- 
-    /* Device write only portion */ 
- 
-    /* Destination data */ 
-    pub dst_data: [u8; dst_data_len], 
-    /* Hash result data */ 
-    pub hash_result: [u8; hash_result_len], 
+
+
+variable_length_fields! { 
+    struct alg_chain_data_vlf <= alg_chain_data_flf { 
+        /* Device read only portion */ 
+    
+        /* Initialization Vector or Counter data */ 
+        pub iv: [u8; iv_len], 
+        /* Source data */ 
+        pub src_data: [u8; src_data_len], 
+        /* Additional authenticated data if exists */ 
+        pub aad: [u8; aad_len], 
+    
+        /* Device write only portion */ 
+    
+        /* Destination data */ 
+        pub dst_data: [u8; dst_data_len], 
+        /* Hash result data */ 
+        pub hash_result: [u8; hash_result_len], 
+    }
 }
 
 const VIRTIO_CRYPTO_SYM_DATA_REQ_HDR_SIZE: usize = 40;
 
-struct virtio_crypto_sym_data_flf { 
+struct sym_data_flf { 
     /* Device read only portion */ 
  
     pub op_type_flf: [u8; VIRTIO_CRYPTO_SYM_DATA_REQ_HDR_SIZE], 
@@ -568,22 +594,13 @@ struct virtio_crypto_sym_data_flf {
     pub padding: u32, 
 }
  
-struct virtio_crypto_sym_data_vlf { 
-    pub op_type_vlf: [u8; sym_para_len], 
-}
+// TODO: similar to sym_create_session_vlf
+// struct sym_data_vlf { 
+//     pub op_type_vlf: [u8; sym_para_len], 
+// }
 
-struct virtio_crypto_cipher_data_flf_stateless { 
-    pub paras: CipherParas,
-    // struct { 
-        /* See VIRTIO_CRYPTO_CIPHER* above */ 
-        pub algo: u32, 
-        /* length of key */ 
-        pub key_len: u32, 
- 
-        /* See VIRTIO_CRYPTO_OP_* above */ 
-        pub op: u32, 
-    // }sess_para; 
- 
+struct cipher_data_flf_stateless { 
+    pub para: CipherPara,
     /* 
      * Byte Length of valid IV/Counter data pointed to by the below iv data. 
      */ 
@@ -594,40 +611,44 @@ struct virtio_crypto_cipher_data_flf_stateless {
     pub dst_data_len: u32, 
 }
  
-struct virtio_crypto_cipher_data_vlf_stateless { 
-    /* Device read only portion */ 
- 
-    /* The cipher key */ 
-    pub cipher_key: [u8; key_len], 
- 
-    /* Initialization Vector or Counter data. */ 
-    pub iv: [u8; iv_len], 
-    /* Source data */ 
-    pub src_data: [u8; src_data_len], 
- 
-    /* Device write only portion */ 
-    /* Destination data */ 
-    pub dst_data: [u8; dst_data_len], 
+variable_length_fields! {
+    struct cipher_data_vlf_stateless <= cipher_data_flf_stateless { 
+        /* Device read only portion */ 
+    
+        /* The cipher key */ 
+        pub cipher_key: [u8; para, key_len], 
+    
+        /* Initialization Vector or Counter data. */ 
+        pub iv: [u8; iv_len], 
+        /* Source data */ 
+        pub src_data: [u8; src_data_len], 
+    
+        /* Device write only portion */ 
+        /* Destination data */ 
+        pub dst_data: [u8; dst_data_len], 
+    }
 }
 
-struct virtio_crypto_alg_chain_data_flf_stateless { 
+struct AlgChainPara {
+    /* See VIRTIO_CRYPTO_SYM_ALG_CHAIN_ORDER_* above */ 
+    pub alg_chain_order: u32, 
+    /* length of the additional authenticated data in bytes */ 
+    pub para_aad_len: u32, //add_len
+
+    pub cipher_para: CipherPara,
+
     // struct { 
-        /* See VIRTIO_CRYPTO_SYM_ALG_CHAIN_ORDER_* above */ 
-        pub alg_chain_order: u32, 
-        /* length of the additional authenticated data in bytes */ 
-        pub para_aad_len: u32, //add_len
- 
-        pub cipher_paras: CipherParas,
- 
-        // struct { 
-            /* See VIRTIO_CRYPTO_HASH_* or VIRTIO_CRYPTO_MAC_* above */ 
-            pub algo: u32, 
-            /* length of authenticated key */ 
-            pub auth_key_len: u32, 
-            /* See VIRTIO_CRYPTO_SYM_HASH_MODE_* above */ 
-            pub hash_mode: u32, 
-        // }hash; 
-    // }sess_para; 
+        /* See VIRTIO_CRYPTO_HASH_* or VIRTIO_CRYPTO_MAC_* above */ 
+        pub algo: u32, 
+        /* length of authenticated key */ 
+        pub auth_key_len: u32, 
+        /* See VIRTIO_CRYPTO_SYM_HASH_MODE_* above */ 
+        pub hash_mode: u32, 
+    // }hash; 
+}
+
+struct alg_chain_data_flf_stateless { 
+    pub para: AlgChainPara,
  
     pub iv_len: u32, 
     /* Length of source data */ 
@@ -648,33 +669,37 @@ struct virtio_crypto_alg_chain_data_flf_stateless {
     pub hash_result_len: u32, 
     pub reserved: u32, 
 }
- 
-struct virtio_crypto_alg_chain_data_vlf_stateless { 
-    /* Device read only portion */ 
- 
-    /* The cipher key */ 
-    pub cipher_key: [u8; key_len], 
-    /* The auth key */ 
-    pub auth_key: [u8; auth_key_len], 
-    /* Initialization Vector or Counter data */ 
-    pub iv: [u8; iv_len], 
-    /* Additional authenticated data if exists */ 
-    pub aad: [u8; aad_len], 
-    /* Source data */ 
-    pub src_data: [u8; src_data_len], 
- 
-    /* Device write only portion */ 
- 
-    /* Destination data */ 
-    pub dst_data: [u8; dst_data_len], 
-    /* Hash result data */ 
-    pub hash_result: [u8; hash_result_len], 
+
+variable_length_fields! {
+    struct alg_chain_data_vlf_stateless <= alg_chain_data_flf_stateless { 
+        /* Device read only portion */ 
+    
+        /* The cipher key */ 
+        pub cipher_key: [u8; para, cipher_para, key_len], 
+        /* The auth key */ 
+        pub auth_key: [u8; para, auth_key_len], 
+        /* Initialization Vector or Counter data */ 
+        pub iv: [u8; iv_len], 
+        /* Additional authenticated data if exists */ 
+        pub aad: [u8; aad_len], 
+        /* Source data */ 
+        pub src_data: [u8; src_data_len], 
+    
+        /* Device write only portion */ 
+    
+        /* Destination data */ 
+        pub dst_data: [u8; dst_data_len], 
+        /* Hash result data */ 
+        pub hash_result: [u8; hash_result_len], 
+    }
 }
 
 const VIRTIO_CRYPTO_SYM_DATE_REQ_HDR_STATELESS_SIZE: usize = 72; 
 
-struct virtio_crypto_sym_data_flf_stateless { 
-    /* Device read only portion */ 
+struct sym_data_flf_stateless { 
+    /* Device read only portion */
+
+    //TODO: cipher_data_flf_stateless | alg_chain_data_flf_stateless
     pub op_type_flf: [u8; VIRTIO_CRYPTO_SYM_DATE_REQ_HDR_STATELESS_SIZE], 
  
     /* Device write only portion */ 
@@ -682,11 +707,12 @@ struct virtio_crypto_sym_data_flf_stateless {
     pub op_type: u32, 
 }
  
-struct virtio_crypto_sym_data_vlf_stateless { 
-    pub op_type_vlf: [u8; sym_para_len], 
-}
+//TODO: cipher_data_vlf_stateless | alg_chain_data_vlf_stateless
+// struct sym_data_vlf_stateless { 
+//     pub op_type_vlf: [u8; sym_para_len], 
+// }
 
-struct virtio_crypto_aead_data_flf { 
+struct aead_data_flf { 
     /* 
      * Byte Length of valid IV data. 
      * 
@@ -707,44 +733,47 @@ struct virtio_crypto_aead_data_flf {
     pub reserved: u32, 
 }
  
-struct virtio_crypto_aead_data_vlf { 
-    /* Device read only portion */ 
- 
-    /* 
-     * Initialization Vector data. 
-     * 
-     * For GCM mode, this is either the IV (if the length is 96 bits) or J0 
-     *   (for other sizes), where J0 is as defined by NIST SP800-38D. 
-     *   Regardless of the IV length, a full 16 bytes needs to be allocated. 
-     * For CCM mode, the first byte is reserved, and the nonce should be 
-     *   written starting at &iv[1] (to allow space for the implementation 
-     *   to write in the flags in the first byte).  Note that a full 16 bytes 
-     *   should be allocated, even though the iv_len field will have 
-     *   a value less than this. 
-     * 
-     * The IV will be updated after every partial cryptographic operation. 
-     */ 
-    pub iv: [u8; iv_len], 
-    /* Source data */ 
-    pub src_data: [u8; src_data_len], 
-    /* Additional authenticated data if exists */ 
-    pub aad: [u8; aad_len], 
- 
-    /* Device write only portion */ 
-    /* Pointer to output data */ 
-    pub dst_data: [u8; dst_data_len], 
+variable_length_fields! {
+    struct aead_data_vlf <= aead_data_flf { 
+        /* Device read only portion */ 
+    
+        /* 
+        * Initialization Vector data. 
+        * 
+        * For GCM mode, this is either the IV (if the length is 96 bits) or J0 
+        *   (for other sizes), where J0 is as defined by NIST SP800-38D. 
+        *   Regardless of the IV length, a full 16 bytes needs to be allocated. 
+        * For CCM mode, the first byte is reserved, and the nonce should be 
+        *   written starting at &iv[1] (to allow space for the implementation 
+        *   to write in the flags in the first byte).  Note that a full 16 bytes 
+        *   should be allocated, even though the iv_len field will have 
+        *   a value less than this. 
+        * 
+        * The IV will be updated after every partial cryptographic operation. 
+        */ 
+        pub iv: [u8; iv_len], 
+        /* Source data */ 
+        pub src_data: [u8; src_data_len], 
+        /* Additional authenticated data if exists */ 
+        pub aad: [u8; aad_len], 
+    
+        /* Device write only portion */ 
+        /* Pointer to output data */ 
+        pub dst_data: [u8; dst_data_len], 
+    }
 }
 
-struct virtio_crypto_aead_data_flf_stateless { 
-    struct { 
-        /* See VIRTIO_CRYPTO_AEAD_* above */ 
-        pub algo: u32, 
-        /* length of key */ 
-        pub key_len: u32, 
-        /* encrypt or decrypt, See above VIRTIO_CRYPTO_OP_* */ 
-        pub op: u32, 
-    }sess_para; 
- 
+struct AeadPara {
+    /* See VIRTIO_CRYPTO_AEAD_* above */ 
+    pub algo: u32, 
+    /* length of key */ 
+    pub key_len: u32, 
+    /* encrypt or decrypt, See above VIRTIO_CRYPTO_OP_* */ 
+    pub op: u32, 
+}
+
+struct aead_data_flf_stateless { 
+    pub para: AeadPara,
     /* Byte Length of valid IV data. */ 
     pub iv_len: u32, 
     /* Authentication tag length */ 
@@ -757,69 +786,113 @@ struct virtio_crypto_aead_data_flf_stateless {
     pub dst_data_len: u32, 
 }
  
-struct virtio_crypto_aead_data_vlf_stateless { 
-    /* Device read only portion */ 
- 
-    /* The cipher key */ 
-    pub key: [u8; key_len], 
-    /* Initialization Vector data. */ 
-    pub iv: [u8; iv_len], 
-    /* Source data */ 
-    pub src_data: [u8; src_data_len], 
-    /* Additional authenticated data if exists */ 
-    pub aad: [u8; aad_len], 
- 
-    /* Device write only portion */ 
-    /* Pointer to output data */ 
-    pub dst_data: [u8; dst_data_len], 
+variable_length_fields! {
+    struct aead_data_vlf_stateless <= aead_data_flf_stateless { 
+        /* Device read only portion */ 
+    
+        /* The cipher key */ 
+        pub key: [u8; para, key_len], 
+        /* Initialization Vector data. */ 
+        pub iv: [u8; iv_len], 
+        /* Source data */ 
+        pub src_data: [u8; src_data_len], 
+        /* Additional authenticated data if exists */ 
+        pub aad: [u8; aad_len], 
+    
+        /* Device write only portion */ 
+        /* Pointer to output data */ 
+        pub dst_data: [u8; dst_data_len], 
+    }
 }
 
-struct virtio_crypto_akcipher_data_flf { 
+struct akcipher_data_flf { 
     /* length of source data */ 
     pub src_data_len: u32, 
     /* length of dst data */ 
     pub dst_data_len: u32, 
 }
  
-struct virtio_crypto_akcipher_data_vlf { 
-    /* Device read only portion */ 
-    /* Source data */ 
-    pub src_data: [u8; src_data_len], 
- 
-    /* Device write only portion */ 
-    /* Pointer to output data */ 
-    pub dst_data: [u8; dst_data_len], 
+variable_length_fields! {
+    struct akcipher_data_vlf <= akcipher_data_flf { 
+        /* Device read only portion */ 
+        /* Source data */ 
+        pub src_data: [u8; src_data_len], 
+    
+        /* Device write only portion */ 
+        /* Pointer to output data */ 
+        pub dst_data: [u8; dst_data_len], 
+    }
 }
 
-struct virtio_crypto_akcipher_data_flf_stateless { 
-    struct { 
-        /* See VIRTIO_CYRPTO_AKCIPHER* above */ 
-        pub algo: u32, 
-        /* See VIRTIO_CRYPTO_AKCIPHER_KEY_TYPE_* above */ 
-        pub key_type: u32, 
-        /* length of key */ 
-        pub key_len: u32, 
- 
-        /* algothrim specific parameters described above */ 
-        union { 
-            struct virtio_crypto_rsa_session_para rsa; 
-            struct virtio_crypto_ecdsa_session_para ecdsa; 
-        }u; 
-    }sess_para; 
- 
+enum RsaPaddingAlgo {
+    VIRTIO_CRYPTO_RSA_RAW_PADDING = 0, 
+    VIRTIO_CRYPTO_RSA_PKCS1_PADDING = 1, 
+}
+
+enum RsaHashAlgo {
+    VIRTIO_CRYPTO_RSA_NO_HASH = 0, 
+    VIRTIO_CRYPTO_RSA_MD2 = 1, 
+    VIRTIO_CRYPTO_RSA_MD3 = 2, 
+    VIRTIO_CRYPTO_RSA_MD4 = 3, 
+    VIRTIO_CRYPTO_RSA_MD5 = 4, 
+    VIRTIO_CRYPTO_RSA_SHA1 = 5, 
+    VIRTIO_CRYPTO_RSA_SHA256 = 6, 
+    VIRTIO_CRYPTO_RSA_SHA384 = 7, 
+    VIRTIO_CRYPTO_RSA_SHA512 = 8, 
+    VIRTIO_CRYPTO_RSA_SHA224 = 9, 
+}
+
+struct rsa_session_para { 
+    pub padding_algo: u32, //enum RsaPaddingAlgo
+    pub hash_algo: u32, //enum RsaHashAlgo
+}
+
+enum CurveType {
+    VIRTIO_CRYPTO_CURVE_UNKNOWN = 0, 
+    VIRTIO_CRYPTO_CURVE_NIST_P192 = 1, 
+    VIRTIO_CRYPTO_CURVE_NIST_P224 = 2, 
+    VIRTIO_CRYPTO_CURVE_NIST_P256 = 3, 
+    VIRTIO_CRYPTO_CURVE_NIST_P384 = 4, 
+    VIRTIO_CRYPTO_CURVE_NIST_P521 = 5,
+}
+
+struct ecdsa_session_para { 
+    /* See VIRTIO_CRYPTO_CURVE_* above */ 
+    pub curve_id: u32, //enum CurveType
+}
+
+struct AkcipherDataPara {
+    /* See VIRTIO_CYRPTO_AKCIPHER* above */ 
+    pub algo: u32, 
+    /* See VIRTIO_CRYPTO_AKCIPHER_KEY_TYPE_* above */ 
+    pub key_type: u32, 
+    /* length of key */ 
+    pub key_len: u32, 
+
+    /* algothrim specific parameters described above */
+    // TODO
+    pub para0: u32, //enum RsaPaddingAlgo *or* enum CurveType
+    pub para1: u32, //enum RsaHashAlgo
+}
+
+struct akcipher_data_flf_stateless { 
+    pub para: AkcipherDataPara,
+
     /* length of source data */ 
     pub src_data_len: u32, 
     /* length of destination data */ 
     pub dst_data_len: u32, 
 }
- 
-struct virtio_crypto_akcipher_data_vlf_stateless { 
-    /* Device read only portion */ 
-    pub akcipher_key: [u8; key_len], 
- 
-    /* Source data */ 
-    pub src_data: [u8; src_data_len], 
- 
-    /* Device write only portion */ 
-    pub dst_data: [u8; dst_data_len], 
+
+variable_length_fields! {
+    struct akcipher_data_vlf_stateless <= akcipher_data_flf_stateless { 
+        /* Device read only portion */ 
+        pub akcipher_key: [u8; para, key_len], 
+    
+        /* Source data */ 
+        pub src_data: [u8; src_data_len], 
+    
+        /* Device write only portion */ 
+        pub dst_data: [u8; dst_data_len], 
+    }
 }
