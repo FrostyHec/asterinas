@@ -1,4 +1,7 @@
+use core::slice::SliceIndex;
+
 use alloc::vec::Vec;
+use aster_input::key;
 
 #[allow(non_camel_case_types)]
 enum ServiceCode {
@@ -144,7 +147,7 @@ macro_rules! variable_length_fields {
 
         impl $StructName {
             #[allow(unused_assignments)]
-            fn from_bytes(bytes: &[u8], packet: $T) -> Self {
+            pub fn from_bytes(bytes: &[u8], packet: $T) -> Self {
                 let mut begin: usize = 0;
                 $(
                     let len = packet$(.$len)+ as usize;
@@ -156,7 +159,7 @@ macro_rules! variable_length_fields {
                 }
             }
             
-            fn fill_lengths(&self, packet: &mut $T) {
+            pub fn fill_lengths(&self, packet: &mut $T) {
                 $(
                     packet$(.$len)+ = self.$field.len() as u32;
                 )*
@@ -198,9 +201,17 @@ struct HashCreateSessionFlf {
     /* Device read only portion */ 
 
     /* See HASH_* above */
-    pub algo: u32,
+    algo: u32,
     /* hash result length */ 
     pub hash_result_len: u32, 
+}
+impl HashCreateSessionFlf {
+    pub fn new(algo: HashAlgo, hash_result_len: u32) -> Self {
+        Self {
+            algo: algo as u32,
+            hash_result_len,
+        }
+    }
 }
 
 struct MacCreateSessionFlf { 
@@ -213,6 +224,16 @@ struct MacCreateSessionFlf {
     /* length of authenticated key */ 
     pub auth_key_len: u32, 
     pub padding: u32, 
+}
+impl MacCreateSessionFlf {
+    pub fn new(algo: MacAlgo, hash_result_len: u32, auth_key_len: u32) -> Self {
+        Self {
+            algo: algo as u32,
+            hash_result_len,
+            auth_key_len,
+            padding: 0,
+        }
+    }
 }
 
 variable_length_fields! {
@@ -244,12 +265,21 @@ enum CryptoOp {
 
 struct CipherPara {
     /* See CIPHER* above */ 
-    pub algo: u32, 
+    algo: u32, 
     /* length of key */ 
     pub key_len: u32, 
 
     /* encryption or decryption */ 
-    pub op: u32, //enum CRYPTO_OP
+    op: u32, //enum CRYPTO_OP
+}
+impl CipherPara {
+    pub fn new(algo: CipherAlgo, key_len: u32, op: CryptoOp) -> Self {
+        Self {
+            algo: algo as u32,
+            key_len,
+            op: op as u32,
+        }
+    }
 }
 
 struct CipherSessionFlf { 
@@ -257,14 +287,32 @@ struct CipherSessionFlf {
     pub para: CipherPara,
     pub padding: u32, 
 }
+impl CipherSessionFlf {
+    pub fn new(algo: CipherAlgo, key_len: u32, op: CryptoOp) -> Self {
+        Self {
+            para: CipherPara::new(algo, key_len, op),
+            padding: 0,
+        }
+    }
+}
 const CIPHER_SESSION_FLF_PADDING_SIZE: usize = SYM_SESS_OP_SPEC_HDR_SIZE - size_of::<CipherSessionFlf>();
 
 struct SymCipherCreateSessionFlf {
     pub op_flf: CipherSessionFlf,
-    pub padding_bytes: [u8; CIPHER_SESSION_FLF_PADDING_SIZE],
+    padding_bytes: [u8; CIPHER_SESSION_FLF_PADDING_SIZE],
 
-    pub op_type: u32, //enum sym_op
-    pub padding: u32, 
+    op_type: u32, //enum sym_op
+    padding: u32, 
+}
+impl SymCipherCreateSessionFlf {
+    pub fn new(op_flf: CipherSessionFlf) -> Self {
+        Self {
+            op_flf,
+            padding_bytes: [0; CIPHER_SESSION_FLF_PADDING_SIZE],
+            op_type: SymOp::SYM_OP_CIPHER as u32,
+            padding: 0,
+        }
+    }
 }
 
 variable_length_fields! {
@@ -309,25 +357,62 @@ struct AlgChainAlgoFlf {
 struct AlgChainSessionFlf { 
     /* Device read only portion */ 
 
-    pub alg_chain_order: u32, //enum alg_chain_order
+    alg_chain_order: u32, //enum alg_chain_order
 
-    pub hash_mode: u32, //enum sym_hash_mode
+    hash_mode: u32, //enum sym_hash_mode
     pub cipher_hdr: CipherSessionFlf,
  
     /* fixed length fields, algo specific */ 
     // pub algo_flf: [u8; VIRTIO_CRYPTO_ALG_CHAIN_SESS_OP_SPEC_HDR_SIZE],
-    pub algo_flf: AlgChainAlgoFlf, 
+    algo_flf: AlgChainAlgoFlf, 
  
     /* length of the additional authenticated data (AAD) in bytes */ 
     pub aad_len: u32, 
-    pub padding: u32,
+    padding: u32,
+}
+impl AlgChainSessionFlf {
+    pub fn new(alg_chain_order: AlgChainOrder, cipher_hdr: CipherSessionFlf, aad_len: u32) -> Self {
+        Self {
+            alg_chain_order: alg_chain_order as u32,
+            hash_mode: SymHashMode::SYM_HASH_MODE_PLAIN as u32,
+            cipher_hdr,
+            algo_flf: AlgChainAlgoFlf {
+                algo: 0, hash_result_len: 0, auth_key_len: 0, padding: 0,
+            },
+            aad_len,
+            padding: 0,
+        }
+    }
+    pub fn set_hash(mut self, algo: HashAlgo, hash_result_len: u32) -> Self {
+        self.hash_mode = SymHashMode::SYM_HASH_MODE_NESTED as u32;
+        self.algo_flf.algo = algo as u32;
+        self.algo_flf.hash_result_len = hash_result_len;
+        self.algo_flf.auth_key_len = 0;
+        self
+    }
+    pub fn set_mac(mut self, algo: MacAlgo, hash_result_len: u32, auth_key_len: u32) -> Self {
+        self.hash_mode = SymHashMode::SYM_HASH_MODE_AUTH as u32;
+        self.algo_flf.algo = algo as u32;
+        self.algo_flf.hash_result_len = hash_result_len;
+        self.algo_flf.auth_key_len = auth_key_len;
+        self
+    }
 }
 
 struct SymAlgChainCreateSessionFlf {
     pub op_flf: AlgChainSessionFlf,
 
-    pub op_type: u32, //enum sym_op
-    pub padding: u32, 
+    op_type: u32, //enum sym_op
+    padding: u32, 
+}
+impl SymAlgChainCreateSessionFlf {
+    pub fn new(op_flf: AlgChainSessionFlf) -> Self {
+        Self {
+            op_flf,
+            op_type: SymOp::SYM_OP_ALGORITHM_CHAINING as u32,
+            padding: 0, 
+        }
+    }
 }
 
 variable_length_fields!{
@@ -396,13 +481,41 @@ struct AkcipherCreateSessionFlf {
     /* Device read only portion */ 
  
     /* See AKCIPHER_* above */ 
-    pub algo: u32, 
-    pub key_type: u32, //enum AKCIPHER_KeyType
+    algo: u32, 
+    key_type: u32, //enum AKCIPHER_KeyType
     /* length of key */ 
     pub key_len: u32, 
- 
-    pub algo_flf: [u8; AKCIPHER_SESS_ALGO_SPEC_HDR_SIZE], 
+
+    //pub algo_flf: [u8; AKCIPHER_SESS_ALGO_SPEC_HDR_SIZE],
+    para0: u32, //RSA: enum RsaPaddingAlgo *or* ECDSA: enum CurveType
+    para1: u32, //RSA: enum RsaHashAlgo
+    padding_bytes: [u8; AKCIPHER_SESS_ALGO_SPEC_HDR_SIZE - 8], 
 }
+impl AkcipherCreateSessionFlf {
+    pub fn new(key_type: AkcipherKeyType, key_len: u32) -> Self {
+        Self {
+            algo: 0,
+            key_type: key_type as u32,
+            key_len,
+            para0: 0,
+            para1: 0,
+            padding_bytes: [0; AKCIPHER_SESS_ALGO_SPEC_HDR_SIZE - 8]
+        }
+    }
+    pub fn set_rsa(mut self, padding_algo: RsaPaddingAlgo, hash_algo: RsaHashAlgo) -> Self {
+        self.algo = AkcipherAlgo::AKCIPHER_RSA as u32;
+        self.para0 = padding_algo as u32;
+        self.para1 = hash_algo as u32;
+        self
+    }
+    pub fn set_ecdsa(mut self, curve_id: CurveType) -> Self {
+        self.algo = AkcipherAlgo::AKCIPHER_RSA as u32;
+        self.para0 = curve_id as u32;
+        self.para1 = 0;
+        self
+    }
+}
+
 
 variable_length_fields! {
     struct AkcipherCreateSessionVlf <= AkcipherCreateSessionFlf { 
@@ -556,11 +669,21 @@ const CIPHER_DATA_FLF_PADDING_SIZE: usize = SYM_DATA_REQ_HDR_SIZE - size_of::<Ci
 
 struct SymCipherDataFlf {
     pub op_type_flf: CipherDataFlf,
-    pub padding_bytes: [u8; CIPHER_DATA_FLF_PADDING_SIZE], 
+    padding_bytes: [u8; CIPHER_DATA_FLF_PADDING_SIZE], 
  
     /* See above SYM_OP_* */ 
-    pub op_type: u32, 
-    pub padding: u32, 
+    op_type: u32, 
+    padding: u32, 
+}
+impl SymCipherDataFlf {
+    pub fn new(op_type_flf: CipherDataFlf) -> Self {
+        Self {
+            op_type_flf,
+            padding_bytes: [0; CIPHER_DATA_FLF_PADDING_SIZE],
+            op_type: SymOp::SYM_OP_CIPHER as u32,
+            padding: 0,
+        }
+    }
 }
  
 variable_length_fields! {
@@ -614,8 +737,17 @@ struct SymAlgChainDataFlf {
     pub op_type_flf: AlgChainDataFlf,
  
     /* See above SYM_OP_* */ 
-    pub op_type: u32, 
-    pub padding: u32, 
+    op_type: u32, 
+    padding: u32, 
+}
+impl SymAlgChainDataFlf {
+    pub fn new(op_type_flf: AlgChainDataFlf) -> Self {
+        Self {
+            op_type_flf,
+            op_type: SymOp::SYM_OP_ALGORITHM_CHAINING as u32,
+            padding: 0, 
+        }
+    }
 }
 
 variable_length_fields! { 
@@ -672,11 +804,20 @@ const CIPHER_DATA_FLF_STATELESS_PADDING_SIZE: usize =
 struct SymCipherDataFlfStateless {
     /* Device read only portion */
     pub op_type_flf: CipherDataFlfStateless,
-    pub padding_bytes: [u8; CIPHER_DATA_FLF_STATELESS_PADDING_SIZE],
+    padding_bytes: [u8; CIPHER_DATA_FLF_STATELESS_PADDING_SIZE],
 
-    /* Device write only portion */ 
+    /* Device write only portion */ // TODO: Why the op_type is device write only?
     /* See above SYM_OP_* */ 
-    pub op_type: u32,
+    op_type: u32,
+}
+impl SymCipherDataFlfStateless {
+    pub fn new(op_type_flf: CipherDataFlfStateless) -> Self {
+        Self {
+            op_type_flf,
+            padding_bytes: [0; CIPHER_DATA_FLF_STATELESS_PADDING_SIZE],
+            op_type: SymOp::SYM_OP_CIPHER as u32,
+        }
+    }
 }
  
 variable_length_fields! {
@@ -699,20 +840,45 @@ variable_length_fields! {
 
 struct AlgChainPara {
     /* See SYM_ALG_CHAIN_ORDER_* above */ 
-    pub alg_chain_order: u32, 
+    alg_chain_order: u32, 
     /* length of the additional authenticated data in bytes */ 
-    pub para_aad_len: u32, //add_len
+    pub aad_len: u32, //add_len
 
     pub cipher_para: CipherPara,
 
     // struct { 
         /* See HASH_* or MAC_* above */ 
-        pub algo: u32, 
+        algo: u32, 
         /* length of authenticated key */ 
         pub auth_key_len: u32, 
         /* See SYM_HASH_MODE_* above */ 
-        pub hash_mode: u32, 
+        hash_mode: u32, 
     // }hash; 
+}
+impl AlgChainPara {
+    pub fn new(alg_chain_order: AlgChainOrder, aad_len: u32, cipher_para: CipherPara) -> Self {
+        Self {
+            alg_chain_order: alg_chain_order as u32,
+            aad_len,
+            cipher_para,
+            algo: 0,
+            auth_key_len: 0,
+            hash_mode: SymHashMode::SYM_HASH_MODE_PLAIN as u32,
+        }
+    }
+    // TODO: does HASH has auth_key_len?
+    pub fn set_hash(mut self, algo: HashAlgo, auth_key_len: u32) -> Self {
+        self.hash_mode = SymHashMode::SYM_HASH_MODE_NESTED as u32;
+        self.algo = algo as u32;
+        self.auth_key_len = auth_key_len;
+        self
+    }
+    pub fn set_mac(mut self, algo: MacAlgo, auth_key_len: u32) -> Self {
+        self.hash_mode = SymHashMode::SYM_HASH_MODE_AUTH as u32;
+        self.algo = algo as u32;
+        self.auth_key_len = auth_key_len;
+        self
+    }
 }
 
 struct AlgChainDataFlfStateless { 
@@ -742,9 +908,17 @@ struct SymAlgChainDataFlfStateless {
     /* Device read only portion */
     pub op_type_flf: AlgChainDataFlfStateless,
 
-    /* Device write only portion */ 
+    /* Device write only portion */ // TODO: Why the op_type is device write only?
     /* See above SYM_OP_* */ 
-    pub op_type: u32,
+    op_type: u32,
+}
+impl SymAlgChainDataFlfStateless {
+    pub fn new(op_type_flf: AlgChainDataFlfStateless) -> Self {
+        Self {
+            op_type_flf,
+            op_type: SymOp::SYM_OP_ALGORITHM_CHAINING as u32,
+        }
+    }
 }
 
 variable_length_fields! {
@@ -843,11 +1017,20 @@ variable_length_fields! {
 
 struct AeadPara {
     /* See AEAD_* above */ 
-    pub algo: u32, 
+    algo: u32, 
     /* length of key */ 
     pub key_len: u32, 
     /* encrypt or decrypt, See above OP_* */ 
-    pub op: u32, 
+    op: u32, 
+}
+impl AeadPara {
+    pub fn new(algo: AeadAlgo, key_len: u32, op: CryptoOp) -> Self {
+        Self {
+            algo: algo as u32,
+            key_len,
+            op: op as u32,
+        }
+    }
 }
 
 struct AeadDataFlfStateless { 
@@ -923,8 +1106,8 @@ enum RsaHashAlgo {
 }
 
 struct RsaSessionPara { 
-    pub padding_algo: u32, //enum RsaPaddingAlgo
-    pub hash_algo: u32, //enum RsaHashAlgo
+    padding_algo: u32, //enum RsaPaddingAlgo
+    hash_algo: u32, //enum RsaHashAlgo
 }
 
 #[allow(non_camel_case_types)]
@@ -939,21 +1122,43 @@ enum CurveType {
 
 struct EcdsaSessionPara { 
     /* See CURVE_* above */ 
-    pub curve_id: u32, //enum CurveType
+    curve_id: u32, //enum CurveType
 }
 
 struct AkcipherDataPara {
     /* See VIRTIO_CYRPTO_AKCIPHER* above */ 
-    pub algo: u32, 
+    algo: u32, 
     /* See AKCIPHER_KEY_TYPE_* above */ 
-    pub key_type: u32, 
+    key_type: u32, 
     /* length of key */ 
     pub key_len: u32, 
 
     /* algothrim specific parameters described above */
-    // TODO
-    pub para0: u32, //enum RsaPaddingAlgo *or* enum CurveType
-    pub para1: u32, //enum RsaHashAlgo
+    para0: u32, //RSA: enum RsaPaddingAlgo *or* ECDSA: enum CurveType
+    para1: u32, //RSA: enum RsaHashAlgo
+}
+impl AkcipherDataPara {
+    pub fn new(key_type: AkcipherKeyType, key_len: u32) -> Self {
+        Self {
+            algo: 0,
+            key_type: key_type as u32,
+            key_len,
+            para0: 0,
+            para1: 0,
+        }
+    }
+    pub fn set_rsa(mut self, padding_algo: RsaPaddingAlgo, hash_algo: RsaHashAlgo) -> Self {
+        self.algo = AkcipherAlgo::AKCIPHER_RSA as u32;
+        self.para0 = padding_algo as u32;
+        self.para1 = hash_algo as u32;
+        self
+    }
+    pub fn set_ecdsa(mut self, curve_id: CurveType) -> Self {
+        self.algo = AkcipherAlgo::AKCIPHER_RSA as u32;
+        self.para0 = curve_id as u32;
+        self.para1 = 0;
+        self
+    }
 }
 
 struct AkcipherDataFlfStateless { 
