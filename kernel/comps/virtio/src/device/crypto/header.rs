@@ -1,7 +1,4 @@
-use core::slice::SliceIndex;
-
 use alloc::vec::Vec;
-use aster_input::key;
 
 #[allow(non_camel_case_types)]
 enum ServiceCode {
@@ -101,9 +98,60 @@ enum Status {
     MAX
 }
 
+trait VarLenFields<T> {
+    fn from_bytes(bytes: &[u8], packet: T) -> Self;
+    fn fill_lengths(&self, packet: &mut T);
+}
+
+macro_rules! variable_length_fields {
+    (
+        $(#[$outer:meta])*
+        $vis:vis struct $StructName:ident <= $T:ty {
+            $(
+                $(#[$inner:ident $($args:tt)*])*
+                $fvis:vis $field:ident: [u8; $($len:ident),+],
+            )*
+        }
+    ) => {
+        $(#[$outer])*
+        $vis struct $StructName {
+            $(
+                $fvis $field: Vec<u8>,
+            )*
+        }
+
+        impl VarLenFields<$T> for $StructName {
+            #[allow(unused_assignments)]
+            fn from_bytes(bytes: &[u8], packet: $T) -> Self {
+                let mut begin: usize = 0;
+                $(
+                    let len = packet$(.$len)+ as usize;
+                    let $field = bytes[begin..begin+len].to_vec();
+                    begin += len;
+                )*
+                $StructName {
+                    $($field,)*
+                }
+            }
+            
+            fn fill_lengths(&self, packet: &mut $T) {
+                $(
+                    packet$(.$len)+ = self.$field.len() as u32;
+                )*
+            }
+        }
+
+    }
+}
+
 const fn opcode(service: ServiceCode, op: isize) -> isize {
     ((service as isize) << 8) | op
 }
+
+//
+//  Control Virtqueue
+//
+
 #[allow(non_camel_case_types)]
 enum ControlOpcode {
     CIPHER_CREATE_SESSION =
@@ -127,51 +175,6 @@ enum ControlOpcode {
     AKCIPHER_DESTROY_SESSION =
         opcode(ServiceCode::AKCIPHER, 0x05),
 }
-
-macro_rules! variable_length_fields {
-    (
-        $(#[$outer:meta])*
-        $vis:vis struct $StructName:ident <= $T:ty {
-            $(
-                $(#[$inner:ident $($args:tt)*])*
-                $fvis:vis $field:ident: [u8; $($len:ident),+],
-            )*
-        }
-    ) => {
-        $(#[$outer])*
-        $vis struct $StructName {
-            $(
-                $fvis $field: Vec<u8>,
-            )*
-        }
-
-        impl $StructName {
-            #[allow(unused_assignments)]
-            pub fn from_bytes(bytes: &[u8], packet: $T) -> Self {
-                let mut begin: usize = 0;
-                $(
-                    let len = packet$(.$len)+ as usize;
-                    let $field = bytes[begin..begin+len].to_vec();
-                    begin += len;
-                )*
-                $StructName {
-                    $($field,)*
-                }
-            }
-            
-            pub fn fill_lengths(&self, packet: &mut $T) {
-                $(
-                    packet$(.$len)+ = self.$field.len() as u32;
-                )*
-            }
-        }
-
-    }
-}
-
-//
-//  Control Virtqueue
-//
 
 struct ControlHeader {
     pub opcode: u32, //enum ControlOpcode
@@ -197,6 +200,50 @@ struct DestroySessionInput {
     pub status: u8, 
 }
 
+
+trait SessionFlf: Sized {
+    type Vlf: VarLenFields<Self>;
+    const CREATE_SESSION:  ControlOpcode;
+    const DESTROY_SESSION: ControlOpcode;
+}
+
+impl SessionFlf for HashCreateSessionFlf {
+    type Vlf = HashNoVlf;
+    const CREATE_SESSION:  ControlOpcode = ControlOpcode::HASH_CREATE_SESSION;
+    const DESTROY_SESSION: ControlOpcode = ControlOpcode::HASH_DESTROY_SESSION;
+}
+
+impl SessionFlf for MacCreateSessionFlf {
+    type Vlf = MacCreateSessionVlf;
+    const CREATE_SESSION:  ControlOpcode = ControlOpcode::MAC_CREATE_SESSION;
+    const DESTROY_SESSION: ControlOpcode = ControlOpcode::MAC_DESTROY_SESSION;
+}
+
+impl SessionFlf for SymCipherCreateSessionFlf {
+    type Vlf = SymCipherCreateSessionVlf;
+    const CREATE_SESSION:  ControlOpcode = ControlOpcode::CIPHER_CREATE_SESSION;
+    const DESTROY_SESSION: ControlOpcode = ControlOpcode::CIPHER_DESTROY_SESSION;
+}
+
+impl SessionFlf for SymAlgChainCreateSessionFlf {
+    type Vlf = SymAlgChainCreateSessionVlf;
+    const CREATE_SESSION:  ControlOpcode = ControlOpcode::CIPHER_CREATE_SESSION;
+    const DESTROY_SESSION: ControlOpcode = ControlOpcode::CIPHER_DESTROY_SESSION;
+}
+
+impl SessionFlf for AeadCreateSessionFlf {
+    type Vlf = AeadCreateSessionVlf;
+    const CREATE_SESSION:  ControlOpcode = ControlOpcode::AEAD_CREATE_SESSION;
+    const DESTROY_SESSION: ControlOpcode = ControlOpcode::AEAD_DESTROY_SESSION;
+}
+
+impl SessionFlf for AkcipherCreateSessionFlf {
+    type Vlf = AkcipherCreateSessionVlf;
+    const CREATE_SESSION:  ControlOpcode = ControlOpcode::AKCIPHER_CREATE_SESSION;
+    const DESTROY_SESSION: ControlOpcode = ControlOpcode::AKCIPHER_DESTROY_SESSION;
+}
+
+
 struct HashCreateSessionFlf { 
     /* Device read only portion */ 
 
@@ -212,6 +259,14 @@ impl HashCreateSessionFlf {
             hash_result_len,
         }
     }
+}
+
+struct HashNoVlf;
+impl VarLenFields<HashCreateSessionFlf> for HashNoVlf {
+    fn from_bytes(_bytes: &[u8], _packet: HashCreateSessionFlf) -> Self {
+        HashNoVlf {}
+    }
+    fn fill_lengths(&self, _packet: &mut HashCreateSessionFlf) {}
 }
 
 struct MacCreateSessionFlf { 
@@ -563,6 +618,71 @@ struct OpHeader {
     pub padding: u32, 
 }
 
+struct CryptoInhdr {
+    pub status: u8, //enum status
+}
+
+
+trait DataFlf: Sized {
+    type VlfIn:  VarLenFields<Self>;
+    type VlfOut: VarLenFields<Self>;
+}
+
+impl DataFlf for HashDataFlf {
+    type VlfIn  = HashDataVlfIn;
+    type VlfOut = HashDataVlfOut;
+}
+impl DataFlf for HashDataFlfStateless {
+    type VlfIn  = HashDataVlfStatelessIn;
+    type VlfOut = HashDataVlfStatelessOut;
+}
+
+impl DataFlf for MacDataFlf {
+    type VlfIn  = MacDataVlfIn;
+    type VlfOut = MacDataVlfOut;
+}
+impl DataFlf for MacDataFlfStateless {
+    type VlfIn  = MacDataVlfStatelessIn;
+    type VlfOut = MacDataVlfStatelessOut;
+}
+
+impl DataFlf for SymCipherDataFlf {
+    type VlfIn  = SymCipherDataVlfIn;
+    type VlfOut = SymCipherDataVlfOut;
+}
+impl DataFlf for SymCipherDataFlfStateless {
+    type VlfIn  = SymCipherDataVlfStatelessIn;
+    type VlfOut = SymCipherDataVlfStatelessOut;
+}
+
+impl DataFlf for SymAlgChainDataFlf {
+    type VlfIn  = SymAlgChainDataVlfIn;
+    type VlfOut = SymAlgChainDataVlfOut;
+}
+impl DataFlf for SymAlgChainDataFlfStateless {
+    type VlfIn  = SymAlgChainDataVlfStatelessIn;
+    type VlfOut = SymAlgChainDataVlfStatelessOut;
+}
+
+impl DataFlf for AeadDataFlf {
+    type VlfIn  = AeadDataVlfIn;
+    type VlfOut = AeadDataVlfOut;
+}
+impl DataFlf for AeadDataFlfStateless {
+    type VlfIn  = AeadDataVlfStatelessIn;
+    type VlfOut = AeadDataVlfStatelessOut;
+}
+
+impl DataFlf for AkcipherDataFlf {
+    type VlfIn  = AkcipherDataVlfIn;
+    type VlfOut = AkcipherDataVlfOut;
+}
+impl DataFlf for AkcipherDataFlfStateless {
+    type VlfIn  = AkcipherDataVlfStatelessIn;
+    type VlfOut = AkcipherDataVlfStatelessOut;
+}
+
+
 struct HashDataFlf { 
     /* length of source data */ 
     pub src_data_len: u32, 
@@ -571,11 +691,14 @@ struct HashDataFlf {
 }
 
 variable_length_fields! {
-    struct HashDataVlf <= HashDataFlf { 
+    struct HashDataVlfIn <= HashDataFlf { 
         /* Device read only portion */ 
         /* Source data */ 
-        pub src_data: [u8; src_data_len], 
-    
+        pub src_data: [u8; src_data_len],
+    }
+}
+variable_length_fields! {
+    struct HashDataVlfOut <= HashDataFlf {
         /* Device write only portion */ 
         /* Hash result data */ 
         pub hash_result: [u8; hash_result_len],
@@ -593,11 +716,14 @@ struct HashDataFlfStateless {
 }
 
 variable_length_fields! {
-    struct HashDataVlfStateless <= HashDataFlfStateless { 
+    struct HashDataVlfStatelessIn <= HashDataFlfStateless { 
         /* Device read only portion */ 
         /* Source data */ 
-        pub src_data: [u8; src_data_len], 
-    
+        pub src_data: [u8; src_data_len],
+    }
+}
+variable_length_fields! {
+    struct HashDataVlfStatelessOut <= HashDataFlfStateless {
         /* Device write only portion */ 
         /* Hash result data */ 
         pub hash_result: [u8; hash_result_len], 
@@ -609,11 +735,14 @@ struct MacDataFlf {
 }
  
 variable_length_fields! {
-    struct MacDataVlf <= MacDataFlf  { 
+    struct MacDataVlfIn <= MacDataFlf  { 
         /* Device read only portion */ 
         /* Source data */ 
-        pub src_data: [u8; hdr, src_data_len], 
-    
+        pub src_data: [u8; hdr, src_data_len],
+    }
+}
+variable_length_fields! {
+    struct MacDataVlfOut <= MacDataFlf  {
         /* Device write only portion */ 
         /* Hash result data */ 
         pub hash_result: [u8; hdr, hash_result_len], 
@@ -635,13 +764,16 @@ struct MacDataFlfStateless {
 }
 
 variable_length_fields! {
-    struct MacDataVlfStateless <= MacDataFlfStateless { 
+    struct MacDataVlfStatelessIn <= MacDataFlfStateless { 
         /* Device read only portion */ 
         /* The authenticated key */ 
         pub auth_key: [u8; auth_key_len], 
         /* Source data */ 
-        pub src_data: [u8; src_data_len], 
-    
+        pub src_data: [u8; src_data_len],
+    }
+}
+variable_length_fields! {
+    struct MacDataVlfStatelessOut <= MacDataFlfStateless {
         /* Device write only portion */ 
         /* Hash result data */ 
         pub hash_result: [u8; hash_result_len], 
@@ -687,7 +819,7 @@ impl SymCipherDataFlf {
 }
  
 variable_length_fields! {
-    struct SymCipherDataVlf <= SymCipherDataFlf { 
+    struct SymCipherDataVlfIn <= SymCipherDataFlf { 
         /* Device read only portion */ 
     
         /* 
@@ -704,8 +836,11 @@ variable_length_fields! {
         */ 
         pub iv: [u8; op_type_flf, iv_len], 
         /* Source data */ 
-        pub src_data: [u8; op_type_flf, src_data_len], 
-    
+        pub src_data: [u8; op_type_flf, src_data_len],
+    }
+}
+variable_length_fields! {
+    struct SymCipherDataVlfOut <= SymCipherDataFlf {
         /* Device write only portion */ 
         /* Destination data */ 
         pub dst_data: [u8; op_type_flf, dst_data_len], 
@@ -751,7 +886,7 @@ impl SymAlgChainDataFlf {
 }
 
 variable_length_fields! { 
-    struct SymAlgChainDataVlf <= SymAlgChainDataFlf { 
+    struct SymAlgChainDataVlfIn <= SymAlgChainDataFlf { 
         /* Device read only portion */ 
     
         /* Initialization Vector or Counter data */ 
@@ -759,8 +894,11 @@ variable_length_fields! {
         /* Source data */ 
         pub src_data: [u8; op_type_flf, src_data_len], 
         /* Additional authenticated data if exists */ 
-        pub aad: [u8; op_type_flf, aad_len], 
-    
+        pub aad: [u8; op_type_flf, aad_len],
+    }
+}
+variable_length_fields! { 
+    struct SymAlgChainDataVlfOut <= SymAlgChainDataFlf {
         /* Device write only portion */ 
     
         /* Destination data */ 
@@ -821,7 +959,7 @@ impl SymCipherDataFlfStateless {
 }
  
 variable_length_fields! {
-    struct SymCipherDataVlfStateless <= SymCipherDataFlfStateless { 
+    struct SymCipherDataVlfStatelessIn <= SymCipherDataFlfStateless { 
         /* Device read only portion */ 
     
         /* The cipher key */ 
@@ -830,8 +968,11 @@ variable_length_fields! {
         /* Initialization Vector or Counter data. */ 
         pub iv: [u8; op_type_flf, iv_len], 
         /* Source data */ 
-        pub src_data: [u8; op_type_flf, src_data_len], 
-    
+        pub src_data: [u8; op_type_flf, src_data_len],
+    }
+}
+variable_length_fields! {
+    struct SymCipherDataVlfStatelessOut <= SymCipherDataFlfStateless { 
         /* Device write only portion */ 
         /* Destination data */ 
         pub dst_data: [u8; op_type_flf, dst_data_len], 
@@ -922,7 +1063,7 @@ impl SymAlgChainDataFlfStateless {
 }
 
 variable_length_fields! {
-    struct SymAlgChainDataVlfStateless <= SymAlgChainDataFlfStateless { 
+    struct SymAlgChainDataVlfStatelessIn <= SymAlgChainDataFlfStateless { 
         /* Device read only portion */ 
     
         /* The cipher key */ 
@@ -934,8 +1075,11 @@ variable_length_fields! {
         /* Additional authenticated data if exists */ 
         pub aad: [u8; op_type_flf, aad_len], 
         /* Source data */ 
-        pub src_data: [u8; op_type_flf, src_data_len], 
-    
+        pub src_data: [u8; op_type_flf, src_data_len],
+    }
+}
+variable_length_fields! {
+    struct SymAlgChainDataVlfStatelessOut <= SymAlgChainDataFlfStateless {
         /* Device write only portion */ 
     
         /* Destination data */ 
@@ -986,7 +1130,7 @@ struct AeadDataFlf {
 }
  
 variable_length_fields! {
-    struct AeadDataVlf <= AeadDataFlf { 
+    struct AeadDataVlfIn <= AeadDataFlf { 
         /* Device read only portion */ 
     
         /* 
@@ -1007,8 +1151,11 @@ variable_length_fields! {
         /* Source data */ 
         pub src_data: [u8; src_data_len], 
         /* Additional authenticated data if exists */ 
-        pub aad: [u8; aad_len], 
-    
+        pub aad: [u8; aad_len],
+    }
+}
+variable_length_fields! {
+    struct AeadDataVlfOut <= AeadDataFlf { 
         /* Device write only portion */ 
         /* Pointer to output data */ 
         pub dst_data: [u8; dst_data_len], 
@@ -1048,7 +1195,7 @@ struct AeadDataFlfStateless {
 }
  
 variable_length_fields! {
-    struct AeadDataVlfStateless <= AeadDataFlfStateless { 
+    struct AeadDataVlfStatelessIn <= AeadDataFlfStateless { 
         /* Device read only portion */ 
     
         /* The cipher key */ 
@@ -1058,8 +1205,11 @@ variable_length_fields! {
         /* Source data */ 
         pub src_data: [u8; src_data_len], 
         /* Additional authenticated data if exists */ 
-        pub aad: [u8; aad_len], 
-    
+        pub aad: [u8; aad_len],
+    }
+}
+variable_length_fields! {
+    struct AeadDataVlfStatelessOut <= AeadDataFlfStateless {
         /* Device write only portion */ 
         /* Pointer to output data */ 
         pub dst_data: [u8; dst_data_len], 
@@ -1074,11 +1224,14 @@ struct AkcipherDataFlf {
 }
  
 variable_length_fields! {
-    struct AkcipherDataVlf <= AkcipherDataFlf { 
+    struct AkcipherDataVlfIn <= AkcipherDataFlf { 
         /* Device read only portion */ 
         /* Source data */ 
-        pub src_data: [u8; src_data_len], 
-    
+        pub src_data: [u8; src_data_len],
+    }
+}
+variable_length_fields! {
+    struct AkcipherDataVlfOut <= AkcipherDataFlf {
         /* Device write only portion */ 
         /* Pointer to output data */ 
         pub dst_data: [u8; dst_data_len], 
@@ -1171,13 +1324,16 @@ struct AkcipherDataFlfStateless {
 }
 
 variable_length_fields! {
-    struct AkcipherDataVlfStateless <= AkcipherDataFlfStateless { 
+    struct AkcipherDataVlfStatelessIn <= AkcipherDataFlfStateless { 
         /* Device read only portion */ 
         pub akcipher_key: [u8; para, key_len], 
     
         /* Source data */ 
-        pub src_data: [u8; src_data_len], 
-    
+        pub src_data: [u8; src_data_len],
+    }
+}
+variable_length_fields! {
+    struct AkcipherDataVlfStatelessOut <= AkcipherDataFlfStateless { 
         /* Device write only portion */ 
         pub dst_data: [u8; dst_data_len], 
     }
