@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use ostd::Pod;
 
 #[allow(non_camel_case_types)]
 enum ServiceCode {
@@ -176,6 +177,8 @@ enum ControlOpcode {
         opcode(ServiceCode::AKCIPHER, 0x05),
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct ControlHeader {
     pub opcode: u32, //enum ControlOpcode
     /* algo should be service-specific algorithms */ 
@@ -184,24 +187,30 @@ struct ControlHeader {
     pub reserved: u32,
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct CreateSessionInput { 
     pub session_id: u64, 
     pub status: u32, 
     pub padding: u32, 
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct DestroySessionFlf { 
     /* Device read only portion */ 
     pub session_id: u64, 
 }
  
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct DestroySessionInput { 
     /* Device write only portion */ 
     pub status: u8, 
 }
 
 
-trait SessionFlf: Sized {
+trait SessionFlf: Sized + Pod + Default {
     type Vlf: VarLenFields<Self>;
     const CREATE_SESSION:  ControlOpcode;
     const DESTROY_SESSION: ControlOpcode;
@@ -244,6 +253,8 @@ impl SessionFlf for AkcipherCreateSessionFlf {
 }
 
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct HashCreateSessionFlf { 
     /* Device read only portion */ 
 
@@ -269,6 +280,8 @@ impl VarLenFields<HashCreateSessionFlf> for HashNoVlf {
     fn fill_lengths(&self, _packet: &mut HashCreateSessionFlf) {}
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct MacCreateSessionFlf { 
     /* Device read only portion */ 
  
@@ -318,6 +331,8 @@ enum CryptoOp {
 }
 
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct CipherPara {
     /* See CIPHER* above */ 
     algo: u32, 
@@ -337,6 +352,8 @@ impl CipherPara {
     }
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct CipherSessionFlf { 
     /* Device read only portion */ 
     pub para: CipherPara,
@@ -352,6 +369,8 @@ impl CipherSessionFlf {
 }
 const CIPHER_SESSION_FLF_PADDING_SIZE: usize = SYM_SESS_OP_SPEC_HDR_SIZE - size_of::<CipherSessionFlf>();
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct SymCipherCreateSessionFlf {
     pub op_flf: CipherSessionFlf,
     padding_bytes: [u8; CIPHER_SESSION_FLF_PADDING_SIZE],
@@ -397,6 +416,8 @@ enum SymHashMode {
 
 const ALG_CHAIN_SESS_OP_SPEC_HDR_SIZE: usize = 16; 
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct AlgChainAlgoFlf {
     /* Device read only portion */ 
  
@@ -409,6 +430,8 @@ struct AlgChainAlgoFlf {
     pub padding: u32, 
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct AlgChainSessionFlf { 
     /* Device read only portion */ 
 
@@ -454,6 +477,8 @@ impl AlgChainSessionFlf {
     }
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct SymAlgChainCreateSessionFlf {
     pub op_flf: AlgChainSessionFlf,
 
@@ -501,6 +526,8 @@ const SYM_SESS_OP_SPEC_HDR_SIZE: usize = 48;
 // //     |cipher_session_vlf
 // //     |alg_chain_session_vlf
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct AeadCreateSessionFlf { 
     /* Device read only portion */ 
  
@@ -532,6 +559,8 @@ enum AkcipherKeyType {
 
 const AKCIPHER_SESS_ALGO_SPEC_HDR_SIZE: usize = 44; 
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct AkcipherCreateSessionFlf { 
     /* Device read only portion */ 
  
@@ -544,7 +573,9 @@ struct AkcipherCreateSessionFlf {
     //pub algo_flf: [u8; AKCIPHER_SESS_ALGO_SPEC_HDR_SIZE],
     para0: u32, //RSA: enum RsaPaddingAlgo *or* ECDSA: enum CurveType
     para1: u32, //RSA: enum RsaHashAlgo
-    padding_bytes: [u8; AKCIPHER_SESS_ALGO_SPEC_HDR_SIZE - 8], 
+    // This is because Default trait doesn't support the array with large length
+    padding_bytes0: [u8; AKCIPHER_SESS_ALGO_SPEC_HDR_SIZE - 8 - 32],
+    padding_bytes1: [u8; 32],
 }
 impl AkcipherCreateSessionFlf {
     pub fn new(key_type: AkcipherKeyType, key_len: u32) -> Self {
@@ -554,7 +585,8 @@ impl AkcipherCreateSessionFlf {
             key_len,
             para0: 0,
             para1: 0,
-            padding_bytes: [0; AKCIPHER_SESS_ALGO_SPEC_HDR_SIZE - 8]
+            padding_bytes0: [0; AKCIPHER_SESS_ALGO_SPEC_HDR_SIZE - 8 - 32],
+            padding_bytes1: [0; 32]
         }
     }
     pub fn set_rsa(mut self, padding_algo: RsaPaddingAlgo, hash_algo: RsaHashAlgo) -> Self {
@@ -607,6 +639,8 @@ enum DataOpcode {
         opcode(ServiceCode::AKCIPHER, 0x03),
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct OpHeader { 
     pub opcode: u32, //enum DataOpcode
     /* algo should be service-specific algorithms */ 
@@ -618,12 +652,14 @@ struct OpHeader {
     pub padding: u32, 
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct CryptoInhdr {
     pub status: u8, //enum status
 }
 
 
-trait DataFlf: Sized {
+trait DataFlf: Sized + Pod + Default {
     type VlfIn:  VarLenFields<Self>;
     type VlfOut: VarLenFields<Self>;
 }
@@ -683,6 +719,8 @@ impl DataFlf for AkcipherDataFlfStateless {
 }
 
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct HashDataFlf { 
     /* length of source data */ 
     pub src_data_len: u32, 
@@ -705,6 +743,8 @@ variable_length_fields! {
     }
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct HashDataFlfStateless { 
     /* See HASH_* above */
     pub algo: u32,
@@ -730,6 +770,8 @@ variable_length_fields! {
     }
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct MacDataFlf { 
     pub hdr: HashDataFlf, 
 }
@@ -749,6 +791,8 @@ variable_length_fields! {
     }
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct MacDataFlfStateless { 
     // struct { 
         /* See MAC_* above */ 
@@ -780,6 +824,8 @@ variable_length_fields! {
     }
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct CipherDataFlf { 
     /* 
      * Byte Length of valid IV/Counter data pointed to by the below iv data. 
@@ -799,6 +845,8 @@ struct CipherDataFlf {
 }
 const CIPHER_DATA_FLF_PADDING_SIZE: usize = SYM_DATA_REQ_HDR_SIZE - size_of::<CipherDataFlf>();
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct SymCipherDataFlf {
     pub op_type_flf: CipherDataFlf,
     padding_bytes: [u8; CIPHER_DATA_FLF_PADDING_SIZE], 
@@ -847,6 +895,8 @@ variable_length_fields! {
     }
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct AlgChainDataFlf { 
     pub iv_len: u32, 
     /* Length of source data */ 
@@ -868,6 +918,8 @@ struct AlgChainDataFlf {
     pub reserved: u32, 
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct SymAlgChainDataFlf {
     pub op_type_flf: AlgChainDataFlf,
  
@@ -925,6 +977,8 @@ const SYM_DATA_REQ_HDR_SIZE: usize = 40;
 // //     pub op_type_vlf: [u8; sym_para_len], 
 // // }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct CipherDataFlfStateless { 
     pub para: CipherPara,
     /* 
@@ -939,10 +993,14 @@ struct CipherDataFlfStateless {
 const CIPHER_DATA_FLF_STATELESS_PADDING_SIZE: usize = 
     SYM_DATE_REQ_HDR_STATELESS_SIZE - size_of::<CipherDataFlfStateless>();
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct SymCipherDataFlfStateless {
     /* Device read only portion */
     pub op_type_flf: CipherDataFlfStateless,
-    padding_bytes: [u8; CIPHER_DATA_FLF_STATELESS_PADDING_SIZE],
+    // This is because Default trait doesn't support the array with large length
+    padding_bytes0: [u8; CIPHER_DATA_FLF_STATELESS_PADDING_SIZE - 32],
+    padding_bytes1: [u8; 32],
 
     /* Device write only portion */ // TODO: Why the op_type is device write only?
     /* See above SYM_OP_* */ 
@@ -952,7 +1010,8 @@ impl SymCipherDataFlfStateless {
     pub fn new(op_type_flf: CipherDataFlfStateless) -> Self {
         Self {
             op_type_flf,
-            padding_bytes: [0; CIPHER_DATA_FLF_STATELESS_PADDING_SIZE],
+            padding_bytes0: [0; CIPHER_DATA_FLF_STATELESS_PADDING_SIZE - 32],
+            padding_bytes1: [0; 32],
             op_type: SymOp::SYM_OP_CIPHER as u32,
         }
     }
@@ -979,6 +1038,8 @@ variable_length_fields! {
     }
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct AlgChainPara {
     /* See SYM_ALG_CHAIN_ORDER_* above */ 
     alg_chain_order: u32, 
@@ -1022,6 +1083,8 @@ impl AlgChainPara {
     }
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct AlgChainDataFlfStateless { 
     pub para: AlgChainPara,
  
@@ -1045,6 +1108,8 @@ struct AlgChainDataFlfStateless {
     pub reserved: u32, 
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct SymAlgChainDataFlfStateless {
     /* Device read only portion */
     pub op_type_flf: AlgChainDataFlfStateless,
@@ -1108,6 +1173,8 @@ const SYM_DATE_REQ_HDR_STATELESS_SIZE: usize = 72;
 // //     pub op_type_vlf: [u8; sym_para_len], 
 // // }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct AeadDataFlf { 
     /* 
      * Byte Length of valid IV data. 
@@ -1162,6 +1229,8 @@ variable_length_fields! {
     }
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct AeadPara {
     /* See AEAD_* above */ 
     algo: u32, 
@@ -1180,6 +1249,8 @@ impl AeadPara {
     }
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct AeadDataFlfStateless { 
     pub para: AeadPara,
     /* Byte Length of valid IV data. */ 
@@ -1216,6 +1287,8 @@ variable_length_fields! {
     }
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct AkcipherDataFlf { 
     /* length of source data */ 
     pub src_data_len: u32, 
@@ -1258,6 +1331,8 @@ enum RsaHashAlgo {
     RSA_SHA224 = 9, 
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct RsaSessionPara { 
     padding_algo: u32, //enum RsaPaddingAlgo
     hash_algo: u32, //enum RsaHashAlgo
@@ -1273,11 +1348,15 @@ enum CurveType {
     CURVE_NIST_P521 = 5,
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct EcdsaSessionPara { 
     /* See CURVE_* above */ 
     curve_id: u32, //enum CurveType
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct AkcipherDataPara {
     /* See VIRTIO_CYRPTO_AKCIPHER* above */ 
     algo: u32, 
@@ -1314,6 +1393,8 @@ impl AkcipherDataPara {
     }
 }
 
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, Pod)]
 struct AkcipherDataFlfStateless { 
     pub para: AkcipherDataPara,
 
