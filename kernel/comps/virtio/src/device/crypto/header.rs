@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use alloc::boxed::Box;
 use ostd::{mm::{DmaDirection, DmaStream, DmaStreamSlice, Fallible, FrameAllocOptions, Infallible, VmReader, VmWriter, PAGE_SIZE}, Pod};
 
 use crate::device::network::header;
@@ -105,7 +106,7 @@ trait VarLenFields<T> {
     fn from_bytes(bytes: &[u8], packet: T) -> Self;
     fn fill_lengths(&self, packet: &mut T);
     fn len(&self) -> usize;
-    fn iter_over(&self, func: impl FnMut(&Vec<u8>) -> ());
+    fn iter_over(&self, func: impl FnMut(&Box<[u8]>) -> ());
 }
 
 macro_rules! variable_length_fields {
@@ -122,7 +123,7 @@ macro_rules! variable_length_fields {
         $(#[$outer])*
         $vis struct $StructName {
             $(
-                $fvis $field: Vec<u8>,
+                $fvis $field: Box<[u8]>,
             )*
         }
 
@@ -133,7 +134,7 @@ macro_rules! variable_length_fields {
                 let mut begin: usize = 0;
                 $(
                     let len = packet$( .$len )+ as usize;
-                    let $field = bytes[begin..begin+len].to_vec();
+                    let $field = bytes[begin..begin+len].to_vec().into_boxed_slice();
                     begin += len;
                 )*
                 $StructName {
@@ -151,7 +152,7 @@ macro_rules! variable_length_fields {
                 0 $( + self.$field.len() )*
             }
 
-            fn iter_over(&self, mut func: impl FnMut(&Vec<u8>) -> ()) {
+            fn iter_over(&self, mut func: impl FnMut(&Box<[u8]>) -> ()) {
                 $( func(&self.$field); )*
             }
         }
@@ -171,7 +172,7 @@ fn new_dma(len: usize, init: bool, mut func: impl FnMut(VmWriter<Infallible>) ->
 
 fn vlf_write_into_dma<T, U: VarLenFields<T>>(writer: &mut VmWriter<Infallible>, vlf: &U) {
     vlf.iter_over(|v| {
-        writer.write(&mut VmReader::from(v.as_slice()));
+        writer.write(&mut VmReader::from(v.as_ref()));
     });
 }
 
