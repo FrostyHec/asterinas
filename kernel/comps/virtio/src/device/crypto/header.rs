@@ -1,5 +1,7 @@
 use alloc::vec::Vec;
-use ostd::Pod;
+use ostd::{mm::{DmaDirection, DmaStream, DmaStreamSlice, Fallible, FrameAllocOptions, Infallible, VmReader, VmWriter, PAGE_SIZE}, Pod};
+
+use crate::device::network::header;
 
 #[allow(non_camel_case_types)]
 pub enum ServiceCode {
@@ -102,6 +104,8 @@ pub enum Status {
 trait VarLenFields<T> {
     fn from_bytes(bytes: &[u8], packet: T) -> Self;
     fn fill_lengths(&self, packet: &mut T);
+    fn len(&self) -> usize;
+    fn iter_over(&self, func: impl FnMut(&Vec<u8>) -> ());
 }
 
 macro_rules! variable_length_fields {
@@ -113,6 +117,7 @@ macro_rules! variable_length_fields {
                 $fvis:vis $field:ident: [u8; $($len:ident),+],
             )*
         }
+        $(#[$impl_outer:meta])*
     ) => {
         $(#[$outer])*
         $vis struct $StructName {
@@ -121,28 +126,53 @@ macro_rules! variable_length_fields {
             )*
         }
 
+        $(#[$impl_outer])*
         impl VarLenFields<$T> for $StructName {
             #[allow(unused_assignments)]
             fn from_bytes(bytes: &[u8], packet: $T) -> Self {
                 let mut begin: usize = 0;
                 $(
-                    let len = packet$(.$len)+ as usize;
+                    let len = packet$( .$len )+ as usize;
                     let $field = bytes[begin..begin+len].to_vec();
                     begin += len;
                 )*
                 $StructName {
-                    $($field,)*
+                    $( $field, )*
                 }
             }
             
             fn fill_lengths(&self, packet: &mut $T) {
                 $(
-                    packet$(.$len)+ = self.$field.len() as u32;
+                    packet$( .$len )+ = self.$field.len() as u32;
                 )*
+            }
+
+            fn len(&self) -> usize {
+                0 $( + self.$field.len() )*
+            }
+
+            fn iter_over(&self, mut func: impl FnMut(&Vec<u8>) -> ()) {
+                $( func(&self.$field); )*
             }
         }
 
     }
+}
+
+fn new_dma(len: usize, init: bool, mut func: impl FnMut(VmWriter<Infallible>) -> ()) -> DmaStreamSlice<DmaStream> {
+    let vm_segment = FrameAllocOptions::new((len-1) / PAGE_SIZE + 1).alloc_contiguous().unwrap();
+    let stream = DmaStream::map(vm_segment, DmaDirection::Bidirectional, false).unwrap();
+    if init {
+        let writer = stream.writer().unwrap();
+        func(writer);
+    }
+    DmaStreamSlice::new(stream, 0, len)
+}
+
+fn vlf_write_into_dma<T, U: VarLenFields<T>>(writer: &mut VmWriter<Infallible>, vlf: &U) {
+    vlf.iter_over(|v| {
+        writer.write(&mut VmReader::from(v.as_slice()));
+    });
 }
 
 const fn opcode(service: ServiceCode, op: isize) -> isize {
@@ -209,11 +239,36 @@ pub struct DestroySessionInput {
     pub status: u8, 
 }
 
+trait CtrlFixedLenFields {
+    fn get_algo(&self) -> u32;
+}
 
-trait SessionFlf: Sized + Pod + Default {
+trait SessionFlf: Sized + Pod + Default + CtrlFixedLenFields {
     type Vlf: VarLenFields<Self>;
     const CREATE_SESSION:  ControlOpcode;
     const DESTROY_SESSION: ControlOpcode;
+
+    fn into_dma(flf: &mut Self, vlf: &Self::Vlf) -> (
+        DmaStreamSlice<DmaStream>, 
+        DmaStreamSlice<DmaStream>,
+    ) {
+        let header = ControlHeader {
+            opcode: Self::CREATE_SESSION as u32,
+            algo: flf.get_algo(),
+            flag: 0, reserved: 0, //TODO: flag?
+        };
+        vlf.fill_lengths(flf);
+        (
+            new_dma(size_of_val(&header) + 56 + vlf.len(), true,
+            |mut writer| {
+                writer.write(&mut VmReader::from(header.as_bytes()));
+                writer.write(&mut VmReader::from(flf.as_bytes()));
+                writer = writer.skip(56 - size_of_val(flf));
+                vlf_write_into_dma(&mut writer, vlf);
+            }),
+            new_dma(size_of::<CreateSessionInput>(), false, |_|{})
+        )
+    }
 }
 
 impl SessionFlf for HashCreateSessionFlf {
@@ -271,13 +326,15 @@ impl HashCreateSessionFlf {
         }
     }
 }
-
-pub struct HashNoVlf;
-impl VarLenFields<HashCreateSessionFlf> for HashNoVlf {
-    fn from_bytes(_bytes: &[u8], _packet: HashCreateSessionFlf) -> Self {
-        HashNoVlf {}
+impl CtrlFixedLenFields for HashCreateSessionFlf {
+    fn get_algo(&self) -> u32 {
+        self.algo
     }
-    fn fill_lengths(&self, _packet: &mut HashCreateSessionFlf) {}
+}
+
+variable_length_fields! {
+    pub struct HashNoVlf <= HashCreateSessionFlf {}
+    #[allow(unused_variables, unused_mut)]
 }
 
 #[repr(C)]
@@ -301,6 +358,11 @@ impl MacCreateSessionFlf {
             auth_key_len,
             padding: 0,
         }
+    }
+}
+impl CtrlFixedLenFields for MacCreateSessionFlf {
+    fn get_algo(&self) -> u32 {
+        self.algo
     }
 }
 
@@ -386,6 +448,11 @@ impl SymCipherCreateSessionFlf {
             op_type: SymOp::SYM_OP_CIPHER as u32,
             padding: 0,
         }
+    }
+}
+impl CtrlFixedLenFields for SymCipherCreateSessionFlf {
+    fn get_algo(&self) -> u32 {
+        self.op_flf.para.algo
     }
 }
 
@@ -494,6 +561,11 @@ impl SymAlgChainCreateSessionFlf {
         }
     }
 }
+impl CtrlFixedLenFields for SymAlgChainCreateSessionFlf {
+    fn get_algo(&self) -> u32 {
+        self.op_flf.cipher_hdr.para.algo
+    }
+}
 
 variable_length_fields!{
     pub struct SymAlgChainCreateSessionVlf <= SymAlgChainCreateSessionFlf { 
@@ -532,7 +604,7 @@ pub struct AeadCreateSessionFlf {
     /* Device read only portion */ 
  
     /* See AEAD_* above */ 
-    pub algo: u32, 
+    algo: u32, 
     /* length of key */ 
     pub key_len: u32, 
     /* Authentication tag length */ 
@@ -540,8 +612,25 @@ pub struct AeadCreateSessionFlf {
     /* The length of the additional authenticated data (AAD) in bytes */ 
     pub aad_len: u32, 
     /* encryption or decryption, See above OP_* */ 
-    pub op: u32, 
-    pub padding: u32, 
+    op: u32, 
+    padding: u32, 
+}
+impl CtrlFixedLenFields for AeadCreateSessionFlf {
+    fn get_algo(&self) -> u32 {
+        self.algo
+    }
+}
+impl AeadCreateSessionFlf {
+    pub fn new(algo: AeadAlgo, key_len: u32, tag_len: u32, aad_len: u32, op: SymOp) -> Self {
+        Self {
+            algo: algo as u32,
+            key_len,
+            tag_len,
+            aad_len,
+            op: op as u32,
+            padding: 0,
+        }
+    }
 }
 
 variable_length_fields! {
@@ -602,6 +691,11 @@ impl AkcipherCreateSessionFlf {
         self
     }
 }
+impl CtrlFixedLenFields for AkcipherCreateSessionFlf {
+    fn get_algo(&self) -> u32 {
+        self.algo
+    }
+}
 
 
 variable_length_fields! {
@@ -641,7 +735,7 @@ pub enum DataOpcode {
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
-pub struct OpHeader { 
+pub struct DataHeader { 
     pub opcode: u32, //pub enum DataOpcode
     /* algo should be service-specific algorithms */ 
     pub algo: u32, 
@@ -662,6 +756,24 @@ pub struct CryptoInhdr {
 trait DataFlf: Sized + Pod + Default {
     type VlfIn:  VarLenFields<Self>;
     type VlfOut: VarLenFields<Self>;
+
+    fn into_dma(header: &DataHeader, flf: &mut Self, vlf_in: &Self::VlfIn, vlf_out: &Self::VlfOut) -> (
+        DmaStreamSlice<DmaStream>, 
+        DmaStreamSlice<DmaStream>,
+    ) {
+        vlf_in .fill_lengths(flf);
+        vlf_out.fill_lengths(flf);
+        (
+            new_dma(size_of_val(header) + 48 + vlf_in.len(), true,
+            |mut writer| {
+                writer.write(&mut VmReader::from(header.as_bytes()));
+                writer.write(&mut VmReader::from(flf.as_bytes()));
+                writer = writer.skip(48 - size_of_val(flf));
+                vlf_write_into_dma(&mut writer, vlf_in);
+            }),
+            new_dma(vlf_out.len(), false, |_|{})
+        )
+    }
 }
 
 impl DataFlf for HashDataFlf {
