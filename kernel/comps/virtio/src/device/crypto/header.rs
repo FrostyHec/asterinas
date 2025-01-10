@@ -1,8 +1,7 @@
-use alloc::vec::Vec;
 use alloc::boxed::Box;
-use ostd::{mm::{DmaDirection, DmaStream, DmaStreamSlice, Fallible, FrameAllocOptions, Infallible, VmReader, VmWriter, PAGE_SIZE}, Pod};
+use int_to_c_enum::TryFromInt;
+use ostd::Pod;
 
-use crate::device::network::header;
 
 #[allow(non_camel_case_types)]
 pub enum ServiceCode {
@@ -90,6 +89,8 @@ pub enum AkcipherAlgo {
     AKCIPHER_ECDSA = 2,
 }
 
+#[repr(u8)]
+#[derive(TryFromInt)]
 #[allow(non_camel_case_types)]
 pub enum Status {
     OK = 0,
@@ -99,14 +100,14 @@ pub enum Status {
     INVSESS = 4,
     NOSPC = 5,
     KEY_REJECTED = 6,
-    MAX
+    MAX = 7,
 }
 
-trait VarLenFields<T> {
+pub trait VarLenFields<T> {
     fn from_bytes(bytes: &[u8], packet: T) -> Self;
     fn fill_lengths(&self, packet: &mut T);
     fn len(&self) -> usize;
-    fn iter_over(&self, func: impl FnMut(&Box<[u8]>) -> ());
+    fn iter_over(&self, func: impl FnMut(&Box<[u8]>));
 }
 
 macro_rules! variable_length_fields {
@@ -134,7 +135,7 @@ macro_rules! variable_length_fields {
                 let mut begin: usize = 0;
                 $(
                     let len = packet$( .$len )+ as usize;
-                    let $field = bytes[begin..begin+len].to_vec().into_boxed_slice();
+                    let $field = bytes[begin..begin+len].into();
                     begin += len;
                 )*
                 $StructName {
@@ -152,28 +153,12 @@ macro_rules! variable_length_fields {
                 0 $( + self.$field.len() )*
             }
 
-            fn iter_over(&self, mut func: impl FnMut(&Box<[u8]>) -> ()) {
+            fn iter_over(&self, mut func: impl FnMut(&Box<[u8]>)) {
                 $( func(&self.$field); )*
             }
         }
 
     }
-}
-
-fn new_dma(len: usize, init: bool, mut func: impl FnMut(VmWriter<Infallible>) -> ()) -> DmaStreamSlice<DmaStream> {
-    let vm_segment = FrameAllocOptions::new((len-1) / PAGE_SIZE + 1).alloc_contiguous().unwrap();
-    let stream = DmaStream::map(vm_segment, DmaDirection::Bidirectional, false).unwrap();
-    if init {
-        let writer = stream.writer().unwrap();
-        func(writer);
-    }
-    DmaStreamSlice::new(stream, 0, len)
-}
-
-fn vlf_write_into_dma<T, U: VarLenFields<T>>(writer: &mut VmWriter<Infallible>, vlf: &U) {
-    vlf.iter_over(|v| {
-        writer.write(&mut VmReader::from(v.as_ref()));
-    });
 }
 
 const fn opcode(service: ServiceCode, op: isize) -> isize {
@@ -240,69 +225,47 @@ pub struct DestroySessionInput {
     pub status: u8, 
 }
 
-trait CtrlFixedLenFields {
+pub trait CtrlFixedLenFields {
     fn get_algo(&self) -> u32;
 }
 
-trait SessionFlf: Sized + Pod + Default + CtrlFixedLenFields {
+pub trait ControlFlf: Sized + Pod + Default + CtrlFixedLenFields {
     type Vlf: VarLenFields<Self>;
     const CREATE_SESSION:  ControlOpcode;
     const DESTROY_SESSION: ControlOpcode;
-
-    fn into_dma(flf: &mut Self, vlf: &Self::Vlf) -> (
-        DmaStreamSlice<DmaStream>, 
-        DmaStreamSlice<DmaStream>,
-    ) {
-        let header = ControlHeader {
-            opcode: Self::CREATE_SESSION as u32,
-            algo: flf.get_algo(),
-            flag: 0, reserved: 0, //TODO: flag?
-        };
-        vlf.fill_lengths(flf);
-        (
-            new_dma(size_of_val(&header) + 56 + vlf.len(), true,
-            |mut writer| {
-                writer.write(&mut VmReader::from(header.as_bytes()));
-                writer.write(&mut VmReader::from(flf.as_bytes()));
-                writer = writer.skip(56 - size_of_val(flf));
-                vlf_write_into_dma(&mut writer, vlf);
-            }),
-            new_dma(size_of::<CreateSessionInput>(), false, |_|{})
-        )
-    }
 }
 
-impl SessionFlf for HashCreateSessionFlf {
+impl ControlFlf for HashCreateSessionFlf {
     type Vlf = HashNoVlf;
     const CREATE_SESSION:  ControlOpcode = ControlOpcode::HASH_CREATE_SESSION;
     const DESTROY_SESSION: ControlOpcode = ControlOpcode::HASH_DESTROY_SESSION;
 }
 
-impl SessionFlf for MacCreateSessionFlf {
+impl ControlFlf for MacCreateSessionFlf {
     type Vlf = MacCreateSessionVlf;
     const CREATE_SESSION:  ControlOpcode = ControlOpcode::MAC_CREATE_SESSION;
     const DESTROY_SESSION: ControlOpcode = ControlOpcode::MAC_DESTROY_SESSION;
 }
 
-impl SessionFlf for SymCipherCreateSessionFlf {
+impl ControlFlf for SymCipherCreateSessionFlf {
     type Vlf = SymCipherCreateSessionVlf;
     const CREATE_SESSION:  ControlOpcode = ControlOpcode::CIPHER_CREATE_SESSION;
     const DESTROY_SESSION: ControlOpcode = ControlOpcode::CIPHER_DESTROY_SESSION;
 }
 
-impl SessionFlf for SymAlgChainCreateSessionFlf {
+impl ControlFlf for SymAlgChainCreateSessionFlf {
     type Vlf = SymAlgChainCreateSessionVlf;
     const CREATE_SESSION:  ControlOpcode = ControlOpcode::CIPHER_CREATE_SESSION;
     const DESTROY_SESSION: ControlOpcode = ControlOpcode::CIPHER_DESTROY_SESSION;
 }
 
-impl SessionFlf for AeadCreateSessionFlf {
+impl ControlFlf for AeadCreateSessionFlf {
     type Vlf = AeadCreateSessionVlf;
     const CREATE_SESSION:  ControlOpcode = ControlOpcode::AEAD_CREATE_SESSION;
     const DESTROY_SESSION: ControlOpcode = ControlOpcode::AEAD_DESTROY_SESSION;
 }
 
-impl SessionFlf for AkcipherCreateSessionFlf {
+impl ControlFlf for AkcipherCreateSessionFlf {
     type Vlf = AkcipherCreateSessionVlf;
     const CREATE_SESSION:  ControlOpcode = ControlOpcode::AKCIPHER_CREATE_SESSION;
     const DESTROY_SESSION: ControlOpcode = ControlOpcode::AKCIPHER_DESTROY_SESSION;
@@ -754,27 +717,9 @@ pub struct CryptoInhdr {
 }
 
 
-trait DataFlf: Sized + Pod + Default {
+pub trait DataFlf: Sized + Pod + Default {
     type VlfIn:  VarLenFields<Self>;
     type VlfOut: VarLenFields<Self>;
-
-    fn into_dma(header: &DataHeader, flf: &mut Self, vlf_in: &Self::VlfIn, vlf_out: &Self::VlfOut) -> (
-        DmaStreamSlice<DmaStream>, 
-        DmaStreamSlice<DmaStream>,
-    ) {
-        vlf_in .fill_lengths(flf);
-        vlf_out.fill_lengths(flf);
-        (
-            new_dma(size_of_val(header) + 48 + vlf_in.len(), true,
-            |mut writer| {
-                writer.write(&mut VmReader::from(header.as_bytes()));
-                writer.write(&mut VmReader::from(flf.as_bytes()));
-                writer = writer.skip(48 - size_of_val(flf));
-                vlf_write_into_dma(&mut writer, vlf_in);
-            }),
-            new_dma(vlf_out.len(), false, |_|{})
-        )
-    }
 }
 
 impl DataFlf for HashDataFlf {
