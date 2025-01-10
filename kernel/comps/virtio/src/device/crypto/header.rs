@@ -104,9 +104,10 @@ pub enum Status {
 }
 
 pub trait VarLenFields<T> {
-    fn from_bytes(bytes: &[u8], packet: T) -> Self;
+    fn from_bytes(bytes: &[u8], packet: &T) -> Self;
     fn fill_lengths(&self, packet: &mut T);
     fn len(&self) -> usize;
+    fn len_from_packet(packet: &T) -> usize;
     fn iter_over(&self, func: impl FnMut(&Box<[u8]>));
 }
 
@@ -131,7 +132,7 @@ macro_rules! variable_length_fields {
         $(#[$impl_outer])*
         impl VarLenFields<$T> for $StructName {
             #[allow(unused_assignments)]
-            fn from_bytes(bytes: &[u8], packet: $T) -> Self {
+            fn from_bytes(bytes: &[u8], packet: &$T) -> Self {
                 let mut begin: usize = 0;
                 $(
                     let len = packet$( .$len )+ as usize;
@@ -151,6 +152,10 @@ macro_rules! variable_length_fields {
 
             fn len(&self) -> usize {
                 0 $( + self.$field.len() )*
+            }
+
+            fn len_from_packet(packet: &$T) -> usize {
+                0 $( + (packet$( .$len )+ as usize) )*
             }
 
             fn iter_over(&self, mut func: impl FnMut(&Box<[u8]>)) {
@@ -210,6 +215,11 @@ pub struct CreateSessionInput {
     pub status: u32, 
     pub padding: u32, 
 }
+impl CreateSessionInput {
+    pub fn get_status(&self) -> Status {
+        TryInto::<Status>::try_into(self.status as u8).unwrap_or(Status::ERR) // TODO: unsafe as u8
+    } 
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
@@ -223,6 +233,11 @@ pub struct DestroySessionFlf {
 pub struct DestroySessionInput { 
     /* Device write only portion */ 
     pub status: u8, 
+}
+impl DestroySessionInput {
+    pub fn get_status(&self) -> Status {
+        TryInto::<Status>::try_into(self.status).unwrap_or(Status::ERR)
+    } 
 }
 
 pub trait CtrlFixedLenFields {
@@ -714,6 +729,11 @@ pub struct DataHeader {
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct CryptoInhdr {
     pub status: u8, //pub enum status
+}
+impl CryptoInhdr {
+    pub fn get_status(&self) -> Status {
+        TryInto::<Status>::try_into(self.status).unwrap_or(Status::ERR)
+    } 
 }
 
 

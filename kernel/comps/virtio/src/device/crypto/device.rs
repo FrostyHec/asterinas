@@ -23,8 +23,8 @@ pub struct CryptoDevice {
     config_manager: ConfigManager<VirtioCryptoConfig>,
     transport: SpinLock<Box<dyn VirtioTransport>>,
 
-    data_queue: SpinLock<VirtQueue>,
-    control_queue: SpinLock<VirtQueue>,
+    pub data_queue: SpinLock<VirtQueue>,
+    pub control_queue: SpinLock<VirtQueue>,
 }
 
 impl CryptoDevice {
@@ -72,7 +72,7 @@ impl CryptoDevice {
         if queue.should_notify() {
             queue.notify();
         }
-        for _ in 0..10000000 {
+        while !queue.can_pop() {
             spin_loop();
         }
         queue.pop_used_with_token(token).expect("pop used failed");
