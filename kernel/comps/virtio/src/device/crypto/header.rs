@@ -1,3 +1,4 @@
+use bitflags::bitflags;
 use alloc::boxed::Box;
 use int_to_c_enum::TryFromInt;
 use ostd::Pod;
@@ -600,7 +601,7 @@ impl CtrlFixedLenFields for AeadCreateSessionFlf {
     }
 }
 impl AeadCreateSessionFlf {
-    pub fn new(algo: AeadAlgo, key_len: u32, tag_len: u32, aad_len: u32, op: SymOp) -> Self {
+    pub fn new(algo: AeadAlgo, key_len: u32, tag_len: u32, aad_len: u32, op: CryptoOp) -> Self {
         Self {
             algo: algo as u32,
             key_len,
@@ -712,6 +713,15 @@ pub enum DataOpcode {
         opcode(ServiceCode::AKCIPHER, 0x03),
 }
 
+bitflags! {
+    #[repr(C)]
+    #[derive(Default, Pod)]
+    pub struct SessionMode: u32 {
+        const STATELESS = 0;
+        const SESSION = 1;
+    }
+}
+
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct DataHeader { 
@@ -721,7 +731,7 @@ pub struct DataHeader {
     pub session_id: u64, 
 // FLAG_SESSION_MODE = 1, 
     /* control flag to control the request */ 
-    pub flag: u32, 
+    pub flag: SessionMode,
     pub padding: u32, 
 }
 
