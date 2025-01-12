@@ -326,19 +326,19 @@ pub struct MacCreateSessionFlf {
     /* Device read only portion */ 
  
     /* See MAC_* above */ 
-    pub algo: u32, 
+    algo: u32, 
     /* hash result length */ 
     pub hash_result_len: u32, 
     /* length of authenticated key */ 
-    pub auth_key_len: u32, 
+    auth_key_len: u32, 
     pub padding: u32, 
 }
 impl MacCreateSessionFlf {
-    pub fn new(algo: MacAlgo, hash_result_len: u32, auth_key_len: u32) -> Self {
+    pub fn new(algo: MacAlgo, hash_result_len: u32) -> Self {
         Self {
             algo: algo as u32,
             hash_result_len,
-            auth_key_len,
+            auth_key_len: 0, // Auto filled
             padding: 0,
         }
     }
@@ -383,16 +383,16 @@ pub struct CipherPara {
     /* See CIPHER* above */ 
     algo: u32, 
     /* length of key */ 
-    pub key_len: u32, 
+    key_len: u32, 
 
     /* encryption or decryption */ 
     op: u32, //pub enum CRYPTO_OP
 }
 impl CipherPara {
-    pub fn new(algo: CipherAlgo, key_len: u32, op: CryptoOp) -> Self {
+    pub fn new(algo: CipherAlgo, op: CryptoOp) -> Self {
         Self {
             algo: algo as u32,
-            key_len,
+            key_len: 0, // Auto filled
             op: op as u32,
         }
     }
@@ -406,9 +406,9 @@ pub struct CipherSessionFlf {
     pub padding: u32, 
 }
 impl CipherSessionFlf {
-    pub fn new(algo: CipherAlgo, key_len: u32, op: CryptoOp) -> Self {
+    pub fn new(algo: CipherAlgo, op: CryptoOp) -> Self {
         Self {
-            para: CipherPara::new(algo, key_len, op),
+            para: CipherPara::new(algo, op),
             padding: 0,
         }
     }
@@ -520,11 +520,11 @@ impl AlgChainSessionFlf {
         self.algo_flf.auth_key_len = 0;
         self
     }
-    pub fn set_mac(mut self, algo: MacAlgo, hash_result_len: u32, auth_key_len: u32) -> Self {
+    pub fn set_mac(mut self, algo: MacAlgo, hash_result_len: u32) -> Self {
         self.hash_mode = SymHashMode::SYM_HASH_MODE_AUTH as u32;
         self.algo_flf.algo = algo as u32;
         self.algo_flf.hash_result_len = hash_result_len;
-        self.algo_flf.auth_key_len = auth_key_len;
+        self.algo_flf.auth_key_len = 0; // Auto filled
         self
     }
 }
@@ -606,10 +606,10 @@ impl CtrlFixedLenFields for AeadCreateSessionFlf {
     }
 }
 impl AeadCreateSessionFlf {
-    pub fn new(algo: AeadAlgo, key_len: u32, tag_len: u32, aad_len: u32, op: CryptoOp) -> Self {
+    pub fn new(algo: AeadAlgo, tag_len: u32, aad_len: u32, op: CryptoOp) -> Self {
         Self {
             algo: algo as u32,
-            key_len,
+            key_len: 0, // Auto filled
             tag_len,
             aad_len,
             op: op as u32,
@@ -643,7 +643,7 @@ pub struct AkcipherCreateSessionFlf {
     algo: u32, 
     key_type: u32, //pub enum AKCIPHER_KeyType
     /* length of key */ 
-    pub key_len: u32, 
+    key_len: u32, 
 
     //pub algo_flf: [u8; AKCIPHER_SESS_ALGO_SPEC_HDR_SIZE],
     para0: u32, //RSA: pub enum RsaPaddingAlgo *or* ECDSA: pub enum CurveType
@@ -653,11 +653,11 @@ pub struct AkcipherCreateSessionFlf {
     padding_bytes1: [u8; 32],
 }
 impl AkcipherCreateSessionFlf {
-    pub fn new(key_type: AkcipherKeyType, key_len: u32) -> Self {
+    pub fn new(key_type: AkcipherKeyType) -> Self {
         Self {
             algo: 0,
             key_type: key_type as u32,
-            key_len,
+            key_len: 0, // Auto filled
             para0: 0,
             para1: 0,
             padding_bytes0: [0; AKCIPHER_SESS_ALGO_SPEC_HDR_SIZE - 8 - 32],
@@ -671,7 +671,7 @@ impl AkcipherCreateSessionFlf {
         self
     }
     pub fn set_ecdsa(mut self, curve_id: CurveType) -> Self {
-        self.algo = AkcipherAlgo::AKCIPHER_RSA as u32;
+        self.algo = AkcipherAlgo::AKCIPHER_ECDSA as u32;
         self.para0 = curve_id as u32;
         self.para1 = 0;
         self
@@ -877,9 +877,17 @@ impl DataFlf for AkcipherDataFlfStateless {
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct HashDataFlf { 
     /* length of source data */ 
-    pub src_data_len: u32, 
+    src_data_len: u32, 
     /* hash result length */ 
     pub hash_result_len: u32, 
+}
+impl HashDataFlf {
+    pub fn new(hash_result_len: u32) -> Self {
+        Self {
+            src_data_len: 0, // Auto filled
+            hash_result_len,
+        }
+    }
 }
 
 variable_length_fields! {
@@ -903,13 +911,24 @@ variable_length_fields! {
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct HashDataFlfStateless { 
     /* See HASH_* above */
-    pub algo: u32,
+    algo: u32,
     /* length of source data */ 
-    pub src_data_len: u32, 
+    src_data_len: u32, 
     /* hash result length */ 
     pub hash_result_len: u32, 
-    pub reserved: u32, 
+    reserved: u32, 
 }
+impl HashDataFlfStateless {
+    pub fn new(algo: MacAlgo, hash_result_len: u32) -> Self {
+        Self {
+            algo: algo as u32,
+            src_data_len: 0, // Auto filled
+            hash_result_len,
+            reserved: 0,
+        }
+    }
+}
+
 
 variable_length_fields! {
     #[derive(Default, Debug, Clone)]
@@ -956,15 +975,25 @@ variable_length_fields! {
 pub struct MacDataFlfStateless { 
     // pub struct { 
         /* See MAC_* above */ 
-        pub algo: u32, 
+        algo: u32, 
         /* length of authenticated key */ 
-        pub auth_key_len: u32, 
+        auth_key_len: u32, 
     // }sess_para; 
  
     /* length of source data */ 
-    pub src_data_len: u32, 
+    src_data_len: u32, 
     /* hash result length */ 
     pub hash_result_len: u32, 
+}
+impl MacDataFlfStateless {
+    pub fn new(algo: MacAlgo, hash_result_len: u32) -> Self {
+        Self {
+            algo: algo as u32,
+            auth_key_len: 0, // Auto filled
+            src_data_len: 0, // Auto filled
+            hash_result_len,
+        }
+    }
 }
 
 variable_length_fields! {
@@ -998,12 +1027,22 @@ pub struct CipherDataFlf {
      * For block ciphers in CTR mode, this is the length of the counter 
      *   (which must be the same as the block length of the cipher). 
      */ 
-    pub iv_len: u32, 
+    iv_len: u32, 
     /* length of source data */ 
-    pub src_data_len: u32, 
+    src_data_len: u32, 
     /* length of destination data */ 
     pub dst_data_len: u32, 
-    pub padding: u32, 
+    padding: u32, 
+}
+impl CipherDataFlf {
+    pub fn new(dst_data_len: u32) -> Self {
+        Self {
+            iv_len: 0, // Auto filled
+            src_data_len: 0, // Auto filled
+            dst_data_len,
+            padding: 0,
+        }
+    }
 }
 const CIPHER_DATA_FLF_PADDING_SIZE: usize = SYM_DATA_REQ_HDR_SIZE - size_of::<CipherDataFlf>();
 
@@ -1062,9 +1101,9 @@ variable_length_fields! {
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct AlgChainDataFlf { 
-    pub iv_len: u32, 
+    iv_len: u32, 
     /* Length of source data */ 
-    pub src_data_len: u32, 
+    src_data_len: u32, 
     /* Length of destination data */ 
     pub dst_data_len: u32, 
     /* Starting point for cipher processing in source data */ 
@@ -1076,10 +1115,26 @@ pub struct AlgChainDataFlf {
     /* Length of the source data that the hash will be computed on */ 
     pub len_to_hash: u32, 
     /* Length of the additional auth data */ 
-    pub aad_len: u32, 
+    aad_len: u32, 
     /* Length of the hash result */ 
     pub hash_result_len: u32, 
-    pub reserved: u32, 
+    reserved: u32, 
+}
+impl AlgChainDataFlf {
+    pub fn new(dst_data_len: u32, cipher_start_src_offset: u32, len_to_cipher: u32, hash_start_src_offset: u32, len_to_hash: u32, hash_result_len: u32) -> Self {
+        Self {
+            iv_len: 0, // Auto filled
+            src_data_len: 0, // Auto filled
+            dst_data_len,
+            cipher_start_src_offset,
+            len_to_cipher,
+            hash_start_src_offset,
+            len_to_hash,
+            aad_len: 0, // Auto filled
+            hash_result_len,
+            reserved: 0,
+        }
+    }
 }
 
 #[repr(C)]
@@ -1150,11 +1205,21 @@ pub struct CipherDataFlfStateless {
     /* 
      * Byte Length of valid IV/Counter data pointed to by the below iv data. 
      */ 
-    pub iv_len: u32, 
+    iv_len: u32, 
     /* length of source data */ 
-    pub src_data_len: u32, 
+    src_data_len: u32, 
     /* length of destination data */ 
     pub dst_data_len: u32, 
+}
+impl CipherDataFlfStateless {
+    pub fn new(para: CipherPara, dst_data_len: u32) -> Self {
+        Self {
+            para,
+            iv_len: 0, // Auto filled
+            src_data_len: 0, // Auto filled
+            dst_data_len,
+        }
+    }
 }
 const CIPHER_DATA_FLF_STATELESS_PADDING_SIZE: usize = 
     SYM_DATE_REQ_HDR_STATELESS_SIZE - size_of::<CipherDataFlfStateless>();
@@ -1220,7 +1285,7 @@ pub struct AlgChainPara {
         /* See HASH_* or MAC_* above */ 
         algo: u32, 
         /* length of authenticated key */ 
-        pub auth_key_len: u32, 
+        auth_key_len: u32, 
         /* See SYM_HASH_MODE_* above */ 
         hash_mode: u32, 
     // }hash; 
@@ -1237,16 +1302,16 @@ impl AlgChainPara {
         }
     }
     // TODO: does HASH has auth_key_len?
-    pub fn set_hash(mut self, algo: HashAlgo, auth_key_len: u32) -> Self {
+    pub fn set_hash(mut self, algo: HashAlgo) -> Self {
         self.hash_mode = SymHashMode::SYM_HASH_MODE_NESTED as u32;
         self.algo = algo as u32;
-        self.auth_key_len = auth_key_len;
+        self.auth_key_len = 0;
         self
     }
-    pub fn set_mac(mut self, algo: MacAlgo, auth_key_len: u32) -> Self {
+    pub fn set_mac(mut self, algo: MacAlgo) -> Self {
         self.hash_mode = SymHashMode::SYM_HASH_MODE_AUTH as u32;
         self.algo = algo as u32;
-        self.auth_key_len = auth_key_len;
+        self.auth_key_len = 0; // Auto filled
         self
     }
 }
@@ -1256,9 +1321,9 @@ impl AlgChainPara {
 pub struct AlgChainDataFlfStateless { 
     pub para: AlgChainPara,
  
-    pub iv_len: u32, 
+    iv_len: u32, 
     /* Length of source data */ 
-    pub src_data_len: u32, 
+    src_data_len: u32, 
     /* Length of destination data */ 
     pub dst_data_len: u32, 
     /* Starting point for cipher processing in source data */ 
@@ -1270,10 +1335,27 @@ pub struct AlgChainDataFlfStateless {
     /* Length of the source data that the hash will be computed on */ 
     pub len_to_hash: u32, 
     /* Length of the additional auth data */ 
-    pub aad_len: u32, 
+    aad_len: u32, 
     /* Length of the hash result */ 
     pub hash_result_len: u32, 
     pub reserved: u32, 
+}
+impl AlgChainDataFlfStateless {
+    pub fn new(para: AlgChainPara, dst_data_len: u32, cipher_start_src_offset: u32, len_to_cipher: u32, hash_start_src_offset: u32, len_to_hash: u32, hash_result_len: u32) -> Self {
+        Self {
+            para,
+            iv_len: 0, // Auto filled
+            src_data_len: 0, // Auto filled
+            dst_data_len,
+            cipher_start_src_offset,
+            len_to_cipher,
+            hash_start_src_offset,
+            len_to_hash,
+            aad_len: 0, // Auto filled
+            hash_result_len,
+            reserved: 0,
+        }
+    }
 }
 
 #[repr(C)]
@@ -1354,16 +1436,28 @@ pub struct AeadDataFlf {
      * For CCM mode, this is the length of the nonce, which can be in the 
      *   range 7 to 13 inclusive. 
      */ 
-    pub iv_len: u32, 
+    iv_len: u32, 
     /* length of additional auth data */ 
-    pub aad_len: u32, 
+    aad_len: u32, 
     /* length of source data */ 
-    pub src_data_len: u32, 
+    src_data_len: u32, 
     /* length of dst data, this should be at least src_data_len + tag_len */ 
     pub dst_data_len: u32, 
     /* Authentication tag length */ 
     pub tag_len: u32, 
-    pub reserved: u32, 
+    reserved: u32, 
+}
+impl AeadDataFlf {
+    pub fn new(dst_data_len: u32, tag_len: u32) -> Self {
+        Self {
+            iv_len: 0, // Auto filled
+            aad_len: 0, // Auto filled
+            src_data_len: 0, // Auto filled
+            dst_data_len,
+            tag_len,
+            reserved: 0,
+        }
+    }
 }
  
 variable_length_fields! {
@@ -1407,15 +1501,15 @@ pub struct AeadPara {
     /* See AEAD_* above */ 
     algo: u32, 
     /* length of key */ 
-    pub key_len: u32, 
+    key_len: u32, 
     /* encrypt or decrypt, See above OP_* */ 
     op: u32, 
 }
 impl AeadPara {
-    pub fn new(algo: AeadAlgo, key_len: u32, op: CryptoOp) -> Self {
+    pub fn new(algo: AeadAlgo, op: CryptoOp) -> Self {
         Self {
             algo: algo as u32,
-            key_len,
+            key_len: 0, // Auto filled
             op: op as u32,
         }
     }
@@ -1426,15 +1520,27 @@ impl AeadPara {
 pub struct AeadDataFlfStateless { 
     pub para: AeadPara,
     /* Byte Length of valid IV data. */ 
-    pub iv_len: u32, 
+    iv_len: u32, 
     /* Authentication tag length */ 
     pub tag_len: u32, 
     /* length of additional auth data */ 
-    pub aad_len: u32, 
+    aad_len: u32, 
     /* length of source data */ 
-    pub src_data_len: u32, 
+    src_data_len: u32, 
     /* length of dst data, this should be at least src_data_len + tag_len */ 
     pub dst_data_len: u32, 
+}
+impl AeadDataFlfStateless {
+    pub fn new(para: AeadPara, tag_len: u32, dst_data_len: u32) -> Self {
+        Self {
+            para,
+            iv_len: 0, // Auto filled
+            tag_len,
+            aad_len: 0, // Auto filled
+            src_data_len: 0, // Auto filled
+            dst_data_len,
+        }
+    }
 }
  
 variable_length_fields! {
@@ -1465,9 +1571,17 @@ variable_length_fields! {
 #[derive(Default, Debug, Clone, Copy, Pod)]
 pub struct AkcipherDataFlf { 
     /* length of source data */ 
-    pub src_data_len: u32, 
+    src_data_len: u32, 
     /* length of dst data */ 
     pub dst_data_len: u32, 
+}
+impl AkcipherDataFlf {
+    pub fn new(dst_data_len: u32) -> Self {
+        Self {
+            src_data_len: 0, // Auto filled
+            dst_data_len,
+        }
+    }
 }
  
 variable_length_fields! {
@@ -1539,18 +1653,18 @@ pub struct AkcipherDataPara {
     /* See AKCIPHER_KEY_TYPE_* above */ 
     key_type: u32, 
     /* length of key */ 
-    pub key_len: u32, 
+    key_len: u32, 
 
     /* algothrim specific parameters described above */
     para0: u32, //RSA: pub enum RsaPaddingAlgo *or* ECDSA: pub enum CurveType
     para1: u32, //RSA: pub enum RsaHashAlgo
 }
 impl AkcipherDataPara {
-    pub fn new(key_type: AkcipherKeyType, key_len: u32) -> Self {
+    pub fn new(key_type: AkcipherKeyType) -> Self {
         Self {
             algo: 0,
             key_type: key_type as u32,
-            key_len,
+            key_len: 0, // Auto filled
             para0: 0,
             para1: 0,
         }
@@ -1562,7 +1676,7 @@ impl AkcipherDataPara {
         self
     }
     pub fn set_ecdsa(mut self, curve_id: CurveType) -> Self {
-        self.algo = AkcipherAlgo::AKCIPHER_RSA as u32;
+        self.algo = AkcipherAlgo::AKCIPHER_ECDSA as u32;
         self.para0 = curve_id as u32;
         self.para1 = 0;
         self
@@ -1575,9 +1689,18 @@ pub struct AkcipherDataFlfStateless {
     pub para: AkcipherDataPara,
 
     /* length of source data */ 
-    pub src_data_len: u32, 
+    src_data_len: u32, 
     /* length of destination data */ 
     pub dst_data_len: u32, 
+}
+impl AkcipherDataFlfStateless {
+    pub fn new(para: AkcipherDataPara, dst_data_len: u32) -> Self {
+        Self {
+            para,
+            src_data_len: 0, // Auto filled
+            dst_data_len,
+        }
+    }
 }
 
 variable_length_fields! {

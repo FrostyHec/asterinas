@@ -57,8 +57,7 @@ impl CryptoDevice {
             &device, 
             &mut SymCipherCreateSessionFlf::new(
                 CipherSessionFlf::new(
-                    CipherAlgo::CIPHER_3DES_CBC, 
-                    0, //auto filled 
+                    CipherAlgo::CIPHER_3DES_CBC,
                     CryptoOp::OP_DECRYPT,
                 )
             ),
@@ -70,9 +69,7 @@ impl CryptoDevice {
 
         let encrypt_out = session.basic_request(
             CipherOpcode::ENCRYPT, //TODO
-            &mut SymCipherDataFlf::new(CipherDataFlf {
-                iv_len: 0, src_data_len: 0, dst_data_len: 8, padding: 0,
-            }), 
+            &mut SymCipherDataFlf::new(CipherDataFlf::new(8)),
             &SymCipherDataVlfIn {
                 iv: vec![0 as u8; 8].into_boxed_slice(), //len == 8 ? 
                 src_data: vec![190, 147, 128, 144, 239, 38, 200, 41].into_boxed_slice(),
@@ -82,9 +79,7 @@ impl CryptoDevice {
 
         let decrypt_out = session.basic_request(
             CipherOpcode::DECRYPT, //TODO: but useless, only the op in create session is used
-            &mut SymCipherDataFlf::new(CipherDataFlf {
-                iv_len: 0, src_data_len: 0, dst_data_len: 8, padding: 0,
-            }), 
+            &mut SymCipherDataFlf::new(CipherDataFlf::new(8)),
             &SymCipherDataVlfIn {
                 iv: vec![0 as u8; 8].into_boxed_slice(), //len == 8 ? 
                 src_data: encrypt_out.dst_data,
