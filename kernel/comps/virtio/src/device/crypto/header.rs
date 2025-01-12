@@ -5,6 +5,7 @@ use ostd::Pod;
 
 
 #[repr(u32)]
+#[derive(Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum ServiceCode {
     /*CIPHER (Symmetric Key Cipher) service*/
@@ -19,6 +20,7 @@ pub enum ServiceCode {
     AKCIPHER = 4,
 }
 
+#[derive(Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum CipherAlgo {
     NO_CIPHER = 0,
@@ -37,7 +39,7 @@ pub enum CipherAlgo {
     CIPHER_AES_XTS = 13,
     CIPHER_ZUC_EEA3 = 14,
 }
-
+#[derive(Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum HashAlgo {
     NO_HASH = 0,
@@ -54,7 +56,7 @@ pub enum HashAlgo {
     HASH_SHA3_SHAKE128 = 11,
     HASH_SHA3_SHAKE256 = 12,
 }
-
+#[derive(Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum MacAlgo {
     NO_MAC = 0,
@@ -75,7 +77,7 @@ pub enum MacAlgo {
     MAC_XCBC_AES = 53,
     MAC_ZUC_EIA3 = 54,
 }
-
+#[derive(Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum AeadAlgo {
     NO_AEAD = 0,
@@ -83,14 +85,14 @@ pub enum AeadAlgo {
     AEAD_CCM = 2,
     AEAD_CHACHA20_POLY1305 = 3,
 }
-
+#[derive(Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum AkcipherAlgo {
     NO_AKCIPHER = 0,
     AKCIPHER_RSA = 1,
     AKCIPHER_ECDSA = 2,
 }
-
+#[derive(Clone, Copy)]
 #[repr(u8)]
 #[derive(Debug, TryFromInt)]
 #[allow(non_camel_case_types)]
