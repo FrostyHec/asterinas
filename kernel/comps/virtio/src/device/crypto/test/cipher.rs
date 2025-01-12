@@ -163,4 +163,184 @@ impl CipherTest {
         assert_eq!(origin_data.into_boxed_slice(), decrypted_data);
         early_println!("AES_CBC encrypt-decrypt test passed")
     }
+
+    pub fn test_aes_ctr_encrypt_decrypt(device: &CryptoDevice) {
+        // WARNING: orign data must be a multiple of 16,
+        //          iv must be at size 16
+        early_println!("Testing AES_CTR encrypt-decrypt");
+
+        let origin_data = vec![
+            190, 147, 128, 144, 239, 38, 200, 41, 190, 147, 128, 144, 239, 38, 200, 41,
+        ];
+        let iv = vec![1 as u8; 16]; // using iv
+        let cipher_key = "yv8.,7f 0,q7fhq 1u9ep,1 ";
+        let encrypted_len: u32 = origin_data.len() as u32;
+        let algo = CipherAlgo::CIPHER_AES_CTR;
+        // encrypt
+        early_println!("encrypting: {:?}", origin_data);
+        let encryped_data = CipherTest::encrypt(
+            device,
+            algo,
+            iv.clone(),
+            &cipher_key,
+            origin_data.clone(),
+            encrypted_len,
+        );
+        // decrypt
+        let decrypted_data = CipherTest::decrypt(
+            device,
+            algo,
+            iv,
+            &cipher_key,
+            encryped_data.to_vec(),
+            origin_data.len() as u32,
+        );
+        assert_eq!(origin_data.into_boxed_slice(), decrypted_data);
+        early_println!("AES_CTR encrypt-decrypt test passed")
+    }
+
+    pub fn test_aes_xts_encrypt_decrypt(device: &CryptoDevice) {
+        // WARNING: orign data must be a multiple of 16,
+        //          iv must be at size 16
+        //          key len must be 48
+        early_println!("Testing AES_XTS encrypt-decrypt");
+
+        let origin_data = vec![
+            190, 147, 128, 144, 239, 38, 200, 41, 190, 147, 128, 144, 239, 38, 200, 41,
+        ];
+        let iv = vec![1 as u8; 16]; // using iv
+        // let cipher_key = "yv8.,7f 0,q7fhq 1u9ep,1 yv8.,7f 0,q7fhq 1u9ep,1 ";
+        let cipher_key = "yv8.,7f 0,q7fhq yv8.,7f 0,q7fhq ";
+        let encrypted_len: u32 = origin_data.len() as u32;
+        let algo = CipherAlgo::CIPHER_AES_XTS;
+        // encrypt
+        early_println!("encrypting: {:?}", origin_data);
+        let encryped_data = CipherTest::encrypt(
+            device,
+            algo,
+            iv.clone(),
+            &cipher_key,
+            origin_data.clone(),
+            encrypted_len,
+        );
+        // decrypt
+        let decrypted_data = CipherTest::decrypt(
+            device,
+            algo,
+            iv,
+            &cipher_key,
+            encryped_data.to_vec(),
+            origin_data.len() as u32,
+        );
+        assert_eq!(origin_data.into_boxed_slice(), decrypted_data);
+        early_println!("AES_XTS encrypt-decrypt test passed")
+    }
+
+    pub fn test_3des_ecb_encrypt_decrypt(device: &CryptoDevice) {
+        // WARNING: orign data must be a multiple of 8(?),
+        //          iv must be at size 8
+
+        early_println!("Testing 3DES_ECB encrypt-decrypt");
+
+        let origin_data = vec![
+            190, 147, 128, 144, 239, 38, 200, 41
+        ];
+        let iv = vec![1 as u8; 8]; // using iv
+        let cipher_key = "yv8.,7f 0,q7fhq 1u9ep,1 ";
+        let encrypted_len: u32 = origin_data.len() as u32;
+        let algo = CipherAlgo::CIPHER_3DES_ECB;
+        // encrypt
+        early_println!("encrypting: {:?}", origin_data);
+        let encryped_data = CipherTest::encrypt(
+            device,
+            algo,
+            iv.clone(),
+            &cipher_key,
+            origin_data.clone(),
+            encrypted_len,
+        );
+        // decrypt
+        let decrypted_data = CipherTest::decrypt(
+            device,
+            algo,
+            iv,
+            &cipher_key,
+            encryped_data.to_vec(),
+            origin_data.len() as u32,
+        );
+        assert_eq!(origin_data.into_boxed_slice(), decrypted_data);
+        early_println!("3DES_ECB encrypt-decrypt test passed")
+    }
+
+    pub fn test_3des_cbc_encrypt_decrypt(device: &CryptoDevice) {
+        // WARNING: orign data must be a multiple of 8(?),
+        //          iv must be at size 8
+
+        early_println!("Testing 3DES_CBC encrypt-decrypt");
+
+        let origin_data = vec![
+            190, 147, 128, 144, 239, 38, 200, 41
+        ];
+        let iv = vec![1 as u8; 8]; // using iv
+        let cipher_key = "yv8.,7f 0,q7fhq 1u9ep,1 ";
+        let encrypted_len: u32 = origin_data.len() as u32;
+        let algo = CipherAlgo::CIPHER_3DES_ECB;
+        // encrypt
+        early_println!("encrypting: {:?}", origin_data);
+        let encryped_data = CipherTest::encrypt(
+            device,
+            algo,
+            iv.clone(),
+            &cipher_key,
+            origin_data.clone(),
+            encrypted_len,
+        );
+        // decrypt
+        let decrypted_data = CipherTest::decrypt(
+            device,
+            algo,
+            iv,
+            &cipher_key,
+            encryped_data.to_vec(),
+            origin_data.len() as u32,
+        );
+        assert_eq!(origin_data.into_boxed_slice(), decrypted_data);
+        early_println!("3DES_CBC encrypt-decrypt test passed")
+    }
+
+
+    pub fn test_3des_ctr_encrypt_decrypt(device: &CryptoDevice) {
+        // WARNING: orign data must be a multiple of 16,
+        //          iv must be at size 16
+        early_println!("Testing 3DES_CTR encrypt-decrypt");
+
+        let origin_data = vec![
+            190, 147, 128, 144, 239, 38, 200, 41
+        ];
+        let iv = vec![1 as u8; 8]; // using iv
+        let cipher_key = "yv8.,7f 0,q7fhq 1u9ep,1 ";
+        let encrypted_len: u32 = origin_data.len() as u32;
+        let algo = CipherAlgo::CIPHER_3DES_CTR;
+        // encrypt
+        early_println!("encrypting: {:?}", origin_data);
+        let encryped_data = CipherTest::encrypt(
+            device,
+            algo,
+            iv.clone(),
+            &cipher_key,
+            origin_data.clone(),
+            encrypted_len,
+        );
+        // decrypt
+        let decrypted_data = CipherTest::decrypt(
+            device,
+            algo,
+            iv,
+            &cipher_key,
+            encryped_data.to_vec(),
+            origin_data.len() as u32,
+        );
+        assert_eq!(origin_data.into_boxed_slice(), decrypted_data);
+        early_println!("3DES_CTR encrypt-decrypt test passed")
+    }
 }
