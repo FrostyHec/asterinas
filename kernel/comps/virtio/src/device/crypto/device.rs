@@ -1,11 +1,11 @@
 use core::hint::spin_loop;
 
-use alloc::{boxed::Box, sync::Arc};
+use alloc::{boxed::Box, sync::Arc, vec};
 use aster_bigtcp::device;
 use log::debug;
 use ostd::{mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions, VmReader, VmWriter, PAGE_SIZE}, sync::SpinLock, Pod};
 
-use crate::{device::{crypto, VirtioDeviceError}, queue::VirtQueue, transport::{ConfigManager, VirtioTransport}};
+use crate::{device::{crypto::{self, header::*, session::*}, VirtioDeviceError}, queue::VirtQueue, transport::{ConfigManager, VirtioTransport}};
 
 use super::{config::VirtioCryptoConfig};
 
@@ -19,6 +19,7 @@ fn bytes_into_dma(bytes: &[u8], init: bool) -> DmaStreamSlice<DmaStream> {
     DmaStreamSlice::new(stream, 0, bytes.len())
 }
 
+#[derive(Debug)]
 pub struct CryptoDevice {
     config_manager: ConfigManager<VirtioCryptoConfig>,
     transport: SpinLock<Box<dyn VirtioTransport>>,
@@ -52,31 +53,67 @@ impl CryptoDevice {
         };
         device.transport.lock().finish_init();
 
-        let in_bytes = [0 as u8; 128];
-        let mut out_bytes = [0 as u8; 128];
+        let session = CryptoSession::<SymCipherSession>::new(
+            &device, 
+            &mut SymCipherCreateSessionFlf::new(
+                CipherSessionFlf::new(
+                    CipherAlgo::CIPHER_3DES_CBC, 
+                    0, //auto filled 
+                    CryptoOp::OP_DECRYPT,
+                )
+            ),
+            &mut SymCipherCreateSessionVlf {
+                cipher_key: "yv8.,7f 0,q7fhq 1u9ep,1 ".as_bytes().into(), //len should be (<= ?) 24 ?
+            },
+        ).unwrap();
+        debug!("create end");
 
-        device.request_by_bytes(&in_bytes, &mut out_bytes);
-        debug!("crypto output: {:?}", out_bytes);
+        let encrypt_out = session.basic_request(
+            DataOpcode::CIPHER_ENCRYPT as u32, //TODO
+            &mut SymCipherDataFlf::new(CipherDataFlf {
+                iv_len: 0, src_data_len: 0, dst_data_len: 8, padding: 0,
+            }), 
+            &SymCipherDataVlfIn {
+                iv: vec![0 as u8; 8].into_boxed_slice(), //len == 8 ? 
+                src_data: vec![190, 147, 128, 144, 239, 38, 200, 41].into_boxed_slice(),
+            }
+        ).unwrap();
+        debug!("encrypt output: {:?}", encrypt_out);
+
+        let decrypt_out = session.basic_request(
+            DataOpcode::CIPHER_DECRYPT as u32, //TODO: but useless, only the op in create session is used
+            &mut SymCipherDataFlf::new(CipherDataFlf {
+                iv_len: 0, src_data_len: 0, dst_data_len: 8, padding: 0,
+            }), 
+            &SymCipherDataVlfIn {
+                iv: vec![0 as u8; 8].into_boxed_slice(), //len == 8 ? 
+                src_data: encrypt_out.dst_data,
+            }
+        ).unwrap();
+        debug!("decrypt output: {:?}", decrypt_out);
+
+        session.destroy().unwrap();
+        debug!("destroy end");
 
         Ok(())
     }
 
-    fn request_by_bytes(&self, in_bytes: &[u8], out_bytes: &mut [u8]) -> usize {
-        let mut queue = self.data_queue.disable_irq().lock();
+    // fn request_by_bytes(&self, in_bytes: &[u8], out_bytes: &mut [u8]) -> usize {
+    //     let mut queue = self.data_queue.disable_irq().lock();
 
-        let in_dma = bytes_into_dma(in_bytes, true);
-        let out_dma = bytes_into_dma(out_bytes, false);
-        let token = queue
-            .add_dma_buf(&[&in_dma], &[&out_dma])
-            .expect("add queue failed");
-        if queue.should_notify() {
-            queue.notify();
-        }
-        while !queue.can_pop() {
-            spin_loop();
-        }
-        queue.pop_used_with_token(token).expect("pop used failed");
-        out_dma.sync().expect("sync failed");
-        out_dma.reader().expect("get reader error").read(&mut VmWriter::from(out_bytes))
-    }
+    //     let in_dma = bytes_into_dma(in_bytes, true);
+    //     let out_dma = bytes_into_dma(out_bytes, false);
+    //     let token = queue
+    //         .add_dma_buf(&[&in_dma], &[&out_dma])
+    //         .expect("add queue failed");
+    //     if queue.should_notify() {
+    //         queue.notify();
+    //     }
+    //     while !queue.can_pop() {
+    //         spin_loop();
+    //     }
+    //     queue.pop_used_with_token(token).expect("pop used failed");
+    //     out_dma.sync().expect("sync failed");
+    //     out_dma.reader().expect("get reader error").read(&mut VmWriter::from(out_bytes))
+    // }
 }

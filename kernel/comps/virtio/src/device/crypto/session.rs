@@ -1,6 +1,7 @@
 use core::{hint::spin_loop, marker::PhantomData};
 
 use alloc::vec;
+use log::debug;
 use ostd::{mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions, Infallible, VmReader, VmWriter, PAGE_SIZE}, sync::SpinLock, Pod};
 
 use crate::queue::VirtQueue;
@@ -22,6 +23,7 @@ pub trait CryptoSessionTrait: Sized {
     type DataVlfStatelessOut: VarLenFields<Self::DataFlfStateless>;
 }
 
+#[derive(Debug)]
 pub struct HashSession;
 impl CryptoSessionTrait for HashSession {
     type CtrlFlf = HashCreateSessionFlf;
@@ -38,6 +40,7 @@ impl CryptoSessionTrait for HashSession {
     type DataVlfStatelessOut = HashDataVlfStatelessOut;
 }
 
+#[derive(Debug)]
 pub struct MacSession;
 impl CryptoSessionTrait for MacSession {
     type CtrlFlf = MacCreateSessionFlf;
@@ -54,6 +57,7 @@ impl CryptoSessionTrait for MacSession {
     type DataVlfStatelessOut = MacDataVlfStatelessOut;
 }
 
+#[derive(Debug)]
 pub struct SymCipherSession;
 impl CryptoSessionTrait for SymCipherSession {
     type CtrlFlf = SymCipherCreateSessionFlf;
@@ -70,6 +74,7 @@ impl CryptoSessionTrait for SymCipherSession {
     type DataVlfStatelessOut = SymCipherDataVlfStatelessOut;
 }
 
+#[derive(Debug)]
 pub struct SymAlgChainSession;
 impl CryptoSessionTrait for SymAlgChainSession {
     type CtrlFlf = SymAlgChainCreateSessionFlf;
@@ -102,6 +107,7 @@ impl CryptoSessionTrait for AeadSession {
     type DataVlfStatelessOut = AeadDataVlfStatelessOut;
 }
 
+#[derive(Debug)]
 pub struct AkcipherSession;
 impl CryptoSessionTrait for AkcipherSession {
     type CtrlFlf = AkcipherCreateSessionFlf;
@@ -118,7 +124,8 @@ impl CryptoSessionTrait for AkcipherSession {
     type DataVlfStatelessOut = AkcipherDataVlfStatelessOut;
 }
 
-struct CryptoSession<'a, T: CryptoSessionTrait> {
+#[derive(Debug)]
+pub struct CryptoSession<'a, T: CryptoSessionTrait> {
     device: &'a CryptoDevice,
     algo: u32,
     session_id: u64,
@@ -135,7 +142,9 @@ impl<'a, T: CryptoSessionTrait> CryptoSession<'a, T> {
             algo,
             flag: 0, reserved: 0, //TODO: flag?
         };
+        debug!("opcode: {:?}", T::CREATE_SESSION as u32);
         let session_info = create_session(&device.control_queue, &header, flf, vlf);
+        debug!("sessino_info: {:?}", session_info);
         let status = session_info.get_status();
         match status {
             Status::OK => Result::Ok(Self {
@@ -148,7 +157,7 @@ impl<'a, T: CryptoSessionTrait> CryptoSession<'a, T> {
         }
     }
 
-    fn basic_request(&self, opcode: u32, flf: &mut T::DataFlf, vlf_in: &T::DataVlfIn)
+    pub fn basic_request(&self, opcode: u32, flf: &mut T::DataFlf, vlf_in: &T::DataVlfIn)
         -> Result<T::DataVlfOut, Status>
     {
         let header = DataHeader {
@@ -167,7 +176,7 @@ impl<'a, T: CryptoSessionTrait> CryptoSession<'a, T> {
         }
     }
 
-    fn basic_request_stateless(&self, opcode: u32, flf: &mut T::DataFlfStateless, vlf_in: &T::DataVlfStatelessIn)
+    pub fn basic_request_stateless(&self, opcode: u32, flf: &mut T::DataFlfStateless, vlf_in: &T::DataVlfStatelessIn)
         -> Result<T::DataVlfStatelessOut, Status>
     {
         let header = DataHeader {
@@ -204,13 +213,14 @@ impl<'a, T: CryptoSessionTrait> CryptoSession<'a, T> {
 }
 
 fn new_dma(len: usize, init: bool, mut func: impl FnMut(VmWriter<Infallible>)) -> DmaStreamSlice<DmaStream> {
-    let vm_segment = FrameAllocOptions::new((len-1) / PAGE_SIZE + 1).alloc_contiguous().unwrap();
+    let page_cnt = (len-1) / PAGE_SIZE + 1;
+    let vm_segment = FrameAllocOptions::new(page_cnt).alloc_contiguous().unwrap();
     let stream = DmaStream::map(vm_segment, DmaDirection::Bidirectional, false).unwrap();
     if init {
         let writer = stream.writer().unwrap();
         func(writer);
     }
-    DmaStreamSlice::new(stream, 0, len)
+    DmaStreamSlice::new(stream, 0, PAGE_SIZE * page_cnt)
 }
 
 fn vlf_write_into_dma<T, U: VarLenFields<T>>(writer: &mut VmWriter<Infallible>, vlf: &U) {
@@ -229,9 +239,15 @@ fn request_by_bytes(queue: &SpinLock<VirtQueue>, in_dma:DmaStreamSlice<DmaStream
     if queue.should_notify() {
         queue.notify();
     }
-    while !queue.can_pop() {
+    let mut can_pop = false;
+    for _ in 0..10000000 {
         spin_loop();
+        if queue.can_pop() {
+            can_pop = true;
+            break;
+        }
     }
+    assert!(can_pop);
 
     queue.pop_used_with_token(token).expect("pop used failed");
     out_dma.sync().expect("sync failed");

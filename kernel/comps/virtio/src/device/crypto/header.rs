@@ -4,6 +4,7 @@ use int_to_c_enum::TryFromInt;
 use ostd::Pod;
 
 
+#[repr(u32)]
 #[allow(non_camel_case_types)]
 pub enum ServiceCode {
     /*CIPHER (Symmetric Key Cipher) service*/
@@ -91,7 +92,7 @@ pub enum AkcipherAlgo {
 }
 
 #[repr(u8)]
-#[derive(TryFromInt)]
+#[derive(Debug, TryFromInt)]
 #[allow(non_camel_case_types)]
 pub enum Status {
     OK = 0,
@@ -167,14 +168,15 @@ macro_rules! variable_length_fields {
     }
 }
 
-const fn opcode(service: ServiceCode, op: isize) -> isize {
-    ((service as isize) << 8) | op
+const fn opcode(service: ServiceCode, op: u32) -> u32 {
+    ((service as u32) << 8) | op
 }
 
 //
 //  Control Virtqueue
 //
 
+#[repr(u32)]
 #[allow(non_camel_case_types)]
 pub enum ControlOpcode {
     CIPHER_CREATE_SESSION =
@@ -313,6 +315,7 @@ impl CtrlFixedLenFields for HashCreateSessionFlf {
 }
 
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct HashNoVlf <= HashCreateSessionFlf {}
     #[allow(unused_variables, unused_mut)]
 }
@@ -347,6 +350,7 @@ impl CtrlFixedLenFields for MacCreateSessionFlf {
 }
 
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct MacCreateSessionVlf <= MacCreateSessionFlf { 
         /* Device read only portion */ 
      
@@ -437,6 +441,7 @@ impl CtrlFixedLenFields for SymCipherCreateSessionFlf {
 }
 
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct SymCipherCreateSessionVlf <= SymCipherCreateSessionFlf { 
         /* Device read only portion */ 
     
@@ -614,6 +619,7 @@ impl AeadCreateSessionFlf {
 }
 
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct AeadCreateSessionVlf <= AeadCreateSessionFlf { 
         /* Device read only portion */ 
         pub key: [u8; key_len], 
@@ -679,6 +685,7 @@ impl CtrlFixedLenFields for AkcipherCreateSessionFlf {
 
 
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct AkcipherCreateSessionVlf <= AkcipherCreateSessionFlf { 
         /* Device read only portion */ 
         pub key: [u8; key_len], 
@@ -689,6 +696,7 @@ variable_length_fields! {
 //  Data Virtqueue
 //
 
+#[repr(u32)]
 #[allow(non_camel_case_types)]
 pub enum DataOpcode {
     CIPHER_ENCRYPT = 
@@ -817,6 +825,7 @@ pub struct HashDataFlf {
 }
 
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct HashDataVlfIn <= HashDataFlf { 
         /* Device read only portion */ 
         /* Source data */ 
@@ -824,6 +833,7 @@ variable_length_fields! {
     }
 }
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct HashDataVlfOut <= HashDataFlf {
         /* Device write only portion */ 
         /* Hash result data */ 
@@ -844,6 +854,7 @@ pub struct HashDataFlfStateless {
 }
 
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct HashDataVlfStatelessIn <= HashDataFlfStateless { 
         /* Device read only portion */ 
         /* Source data */ 
@@ -851,6 +862,7 @@ variable_length_fields! {
     }
 }
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct HashDataVlfStatelessOut <= HashDataFlfStateless {
         /* Device write only portion */ 
         /* Hash result data */ 
@@ -865,6 +877,7 @@ pub struct MacDataFlf {
 }
  
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct MacDataVlfIn <= MacDataFlf  { 
         /* Device read only portion */ 
         /* Source data */ 
@@ -872,6 +885,7 @@ variable_length_fields! {
     }
 }
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct MacDataVlfOut <= MacDataFlf  {
         /* Device write only portion */ 
         /* Hash result data */ 
@@ -896,6 +910,7 @@ pub struct MacDataFlfStateless {
 }
 
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct MacDataVlfStatelessIn <= MacDataFlfStateless { 
         /* Device read only portion */ 
         /* The authenticated key */ 
@@ -905,6 +920,7 @@ variable_length_fields! {
     }
 }
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct MacDataVlfStatelessOut <= MacDataFlfStateless {
         /* Device write only portion */ 
         /* Hash result data */ 
@@ -955,6 +971,7 @@ impl SymCipherDataFlf {
 }
  
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct SymCipherDataVlfIn <= SymCipherDataFlf { 
         /* Device read only portion */ 
     
@@ -976,6 +993,7 @@ variable_length_fields! {
     }
 }
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct SymCipherDataVlfOut <= SymCipherDataFlf {
         /* Device write only portion */ 
         /* Destination data */ 
@@ -1025,7 +1043,8 @@ impl SymAlgChainDataFlf {
     }
 }
 
-variable_length_fields! { 
+variable_length_fields! {
+    #[derive(Default, Debug, Clone)] 
     pub struct SymAlgChainDataVlfIn <= SymAlgChainDataFlf { 
         /* Device read only portion */ 
     
@@ -1037,7 +1056,8 @@ variable_length_fields! {
         pub aad: [u8; op_type_flf, aad_len],
     }
 }
-variable_length_fields! { 
+variable_length_fields! {
+    #[derive(Default, Debug, Clone)] 
     pub struct SymAlgChainDataVlfOut <= SymAlgChainDataFlf {
         /* Device write only portion */ 
     
@@ -1106,6 +1126,7 @@ impl SymCipherDataFlfStateless {
 }
  
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct SymCipherDataVlfStatelessIn <= SymCipherDataFlfStateless { 
         /* Device read only portion */ 
     
@@ -1119,6 +1140,7 @@ variable_length_fields! {
     }
 }
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct SymCipherDataVlfStatelessOut <= SymCipherDataFlfStateless { 
         /* Device write only portion */ 
         /* Destination data */ 
@@ -1216,6 +1238,7 @@ impl SymAlgChainDataFlfStateless {
 }
 
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct SymAlgChainDataVlfStatelessIn <= SymAlgChainDataFlfStateless { 
         /* Device read only portion */ 
     
@@ -1232,6 +1255,7 @@ variable_length_fields! {
     }
 }
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct SymAlgChainDataVlfStatelessOut <= SymAlgChainDataFlfStateless {
         /* Device write only portion */ 
     
@@ -1285,6 +1309,7 @@ pub struct AeadDataFlf {
 }
  
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct AeadDataVlfIn <= AeadDataFlf { 
         /* Device read only portion */ 
     
@@ -1310,6 +1335,7 @@ variable_length_fields! {
     }
 }
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct AeadDataVlfOut <= AeadDataFlf { 
         /* Device write only portion */ 
         /* Pointer to output data */ 
@@ -1354,6 +1380,7 @@ pub struct AeadDataFlfStateless {
 }
  
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct AeadDataVlfStatelessIn <= AeadDataFlfStateless { 
         /* Device read only portion */ 
     
@@ -1368,6 +1395,7 @@ variable_length_fields! {
     }
 }
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct AeadDataVlfStatelessOut <= AeadDataFlfStateless {
         /* Device write only portion */ 
         /* Pointer to output data */ 
@@ -1385,6 +1413,7 @@ pub struct AkcipherDataFlf {
 }
  
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct AkcipherDataVlfIn <= AkcipherDataFlf { 
         /* Device read only portion */ 
         /* Source data */ 
@@ -1392,6 +1421,7 @@ variable_length_fields! {
     }
 }
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct AkcipherDataVlfOut <= AkcipherDataFlf {
         /* Device write only portion */ 
         /* Pointer to output data */ 
@@ -1493,6 +1523,7 @@ pub struct AkcipherDataFlfStateless {
 }
 
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct AkcipherDataVlfStatelessIn <= AkcipherDataFlfStateless { 
         /* Device read only portion */ 
         pub akcipher_key: [u8; para, key_len], 
@@ -1502,6 +1533,7 @@ variable_length_fields! {
     }
 }
 variable_length_fields! {
+    #[derive(Default, Debug, Clone)]
     pub struct AkcipherDataVlfStatelessOut <= AkcipherDataFlfStateless { 
         /* Device write only portion */ 
         pub dst_data: [u8; dst_data_len], 
