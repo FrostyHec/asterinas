@@ -17,11 +17,7 @@ impl CipherTest {
     ) -> Box<[u8]> {
         let encrypt_session = CryptoSession::<SymCipherSession>::new(
             &device,
-            &mut SymCipherCreateSessionFlf::new(CipherSessionFlf::new(
-                algo,
-                0, //auto filled
-                CryptoOp::OP_ENCRYPT,
-            )),
+            &mut SymCipherCreateSessionFlf::new(CipherSessionFlf::new(algo, CryptoOp::OP_ENCRYPT)),
             &mut SymCipherCreateSessionVlf {
                 cipher_key: key.as_bytes().into(), //len should be (<= ?) 24 ?
             },
@@ -29,13 +25,8 @@ impl CipherTest {
         .unwrap();
         let encrypt_out = encrypt_session
             .basic_request(
-                DataOpcode::CIPHER_ENCRYPT as u32,
-                &mut SymCipherDataFlf::new(CipherDataFlf {
-                    iv_len: 0,
-                    src_data_len: 0,
-                    dst_data_len: encrypted_len,
-                    padding: 0,
-                }),
+                CipherOpcode::ENCRYPT,
+                &mut SymCipherDataFlf::new(CipherDataFlf::new(encrypted_len)),
                 &SymCipherDataVlfIn {
                     iv: iv.into_boxed_slice(), //len == 8 ?
                     src_data: origin_data.into_boxed_slice(),
@@ -58,11 +49,7 @@ impl CipherTest {
     ) -> Box<[u8]> {
         let decrypt_session = CryptoSession::<SymCipherSession>::new(
             &device,
-            &mut SymCipherCreateSessionFlf::new(CipherSessionFlf::new(
-                algo,
-                0, //auto filled
-                CryptoOp::OP_DECRYPT,
-            )),
+            &mut SymCipherCreateSessionFlf::new(CipherSessionFlf::new(algo, CryptoOp::OP_DECRYPT)),
             &mut SymCipherCreateSessionVlf {
                 cipher_key: key.as_bytes().into(), //len should be (<= ?) 24 ?
             },
@@ -70,13 +57,8 @@ impl CipherTest {
         .unwrap();
         let decrypt_out = decrypt_session
             .basic_request(
-                DataOpcode::CIPHER_DECRYPT as u32, //TODO: but useless, only the op in create session is used
-                &mut SymCipherDataFlf::new(CipherDataFlf {
-                    iv_len: 0,
-                    src_data_len: 0,
-                    dst_data_len: decrypted_len,
-                    padding: 0,
-                }),
+                CipherOpcode::DECRYPT, //TODO: but useless, only the op in create session is used
+                &mut SymCipherDataFlf::new(CipherDataFlf::new(decrypted_len)),
                 &SymCipherDataVlfIn {
                     iv: iv.into_boxed_slice(), //len == 8 ?
                     src_data: origin_data.into_boxed_slice(),
@@ -209,7 +191,7 @@ impl CipherTest {
             190, 147, 128, 144, 239, 38, 200, 41, 190, 147, 128, 144, 239, 38, 200, 41,
         ];
         let iv = vec![1 as u8; 16]; // using iv
-        // let cipher_key = "yv8.,7f 0,q7fhq 1u9ep,1 yv8.,7f 0,q7fhq 1u9ep,1 ";
+                                    // let cipher_key = "yv8.,7f 0,q7fhq 1u9ep,1 yv8.,7f 0,q7fhq 1u9ep,1 ";
         let cipher_key = "yv8.,7f 0,q7fhq yv8.,7f 0,q7fhq ";
         let encrypted_len: u32 = origin_data.len() as u32;
         let algo = CipherAlgo::CIPHER_AES_XTS;
@@ -242,9 +224,7 @@ impl CipherTest {
 
         early_println!("Testing 3DES_ECB encrypt-decrypt");
 
-        let origin_data = vec![
-            190, 147, 128, 144, 239, 38, 200, 41
-        ];
+        let origin_data = vec![190, 147, 128, 144, 239, 38, 200, 41];
         let iv = vec![1 as u8; 8]; // using iv
         let cipher_key = "yv8.,7f 0,q7fhq 1u9ep,1 ";
         let encrypted_len: u32 = origin_data.len() as u32;
@@ -278,9 +258,7 @@ impl CipherTest {
 
         early_println!("Testing 3DES_CBC encrypt-decrypt");
 
-        let origin_data = vec![
-            190, 147, 128, 144, 239, 38, 200, 41
-        ];
+        let origin_data = vec![190, 147, 128, 144, 239, 38, 200, 41];
         let iv = vec![1 as u8; 8]; // using iv
         let cipher_key = "yv8.,7f 0,q7fhq 1u9ep,1 ";
         let encrypted_len: u32 = origin_data.len() as u32;
@@ -308,15 +286,12 @@ impl CipherTest {
         early_println!("3DES_CBC encrypt-decrypt test passed")
     }
 
-
     pub fn test_3des_ctr_encrypt_decrypt(device: &CryptoDevice) {
         // WARNING: orign data must be a multiple of 16,
         //          iv must be at size 16
         early_println!("Testing 3DES_CTR encrypt-decrypt");
 
-        let origin_data = vec![
-            190, 147, 128, 144, 239, 38, 200, 41
-        ];
+        let origin_data = vec![190, 147, 128, 144, 239, 38, 200, 41];
         let iv = vec![1 as u8; 8]; // using iv
         let cipher_key = "yv8.,7f 0,q7fhq 1u9ep,1 ";
         let encrypted_len: u32 = origin_data.len() as u32;
@@ -344,7 +319,7 @@ impl CipherTest {
         early_println!("3DES_CTR encrypt-decrypt test passed")
     }
 
-    pub fn fuzz_testing(){
+    pub fn fuzz_testing() {
         // TODO rnd selected algo, gen key,input,v and test
     }
 }
