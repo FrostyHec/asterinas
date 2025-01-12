@@ -343,4 +343,8 @@ impl CipherTest {
         assert_eq!(origin_data.into_boxed_slice(), decrypted_data);
         early_println!("3DES_CTR encrypt-decrypt test passed")
     }
+
+    pub fn fuzz_testing(){
+        // TODO rnd selected algo, gen key,input,v and test
+    }
 }
