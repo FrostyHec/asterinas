@@ -721,6 +721,64 @@ pub enum DataOpcode {
         opcode(ServiceCode::AKCIPHER, 0x03),
 }
 
+// Split DataOpcode
+pub struct HashOpcode;
+impl Into<u32> for HashOpcode {
+    fn into(self) -> u32 {
+        opcode(ServiceCode::HASH, 0x00)
+    }
+}
+
+pub struct MacOpcode;
+impl Into<u32> for MacOpcode {
+    fn into(self) -> u32 {
+        opcode(ServiceCode::MAC, 0x00)
+    }
+}
+
+#[repr(u32)]
+pub enum CipherOpcode {
+    ENCRYPT = 
+        opcode(ServiceCode::CIPHER, 0x00),
+    DECRYPT = 
+        opcode(ServiceCode::CIPHER, 0x01),
+}
+impl Into<u32> for CipherOpcode {
+    fn into(self) -> u32 {
+        self as u32
+    }
+}
+
+#[repr(u32)]
+pub enum AeadOpcode {
+    ENCRYPT = 
+        opcode(ServiceCode::AEAD, 0x00),
+    DECRYPT = 
+        opcode(ServiceCode::AEAD, 0x01),
+}
+impl Into<u32> for AeadOpcode {
+    fn into(self) -> u32 {
+        self as u32
+    }
+}
+
+#[repr(u32)]
+pub enum AkcipherOpcode {
+    ENCRYPT = 
+        opcode(ServiceCode::AKCIPHER, 0x00),
+    DECRYPT = 
+        opcode(ServiceCode::AKCIPHER, 0x01),
+    SIGN = 
+        opcode(ServiceCode::AKCIPHER, 0x02),
+    VERIFY = 
+        opcode(ServiceCode::AKCIPHER, 0x03),
+}
+impl Into<u32> for AkcipherOpcode {
+    fn into(self) -> u32 {
+        self as u32
+    }
+}
+
 bitflags! {
     #[repr(C)]
     #[derive(Default, Pod)]

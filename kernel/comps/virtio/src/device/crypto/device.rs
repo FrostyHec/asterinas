@@ -69,7 +69,7 @@ impl CryptoDevice {
         debug!("create end");
 
         let encrypt_out = session.basic_request(
-            DataOpcode::CIPHER_ENCRYPT as u32, //TODO
+            CipherOpcode::ENCRYPT, //TODO
             &mut SymCipherDataFlf::new(CipherDataFlf {
                 iv_len: 0, src_data_len: 0, dst_data_len: 8, padding: 0,
             }), 
@@ -81,7 +81,7 @@ impl CryptoDevice {
         debug!("encrypt output: {:?}", encrypt_out);
 
         let decrypt_out = session.basic_request(
-            DataOpcode::CIPHER_DECRYPT as u32, //TODO: but useless, only the op in create session is used
+            CipherOpcode::DECRYPT, //TODO: but useless, only the op in create session is used
             &mut SymCipherDataFlf::new(CipherDataFlf {
                 iv_len: 0, src_data_len: 0, dst_data_len: 8, padding: 0,
             }), 
