@@ -1,9 +1,11 @@
 
 use cipher::CipherTest;
+use akcipher::AKCipherTest;
 
 use super::device::CryptoDevice;
 
 pub mod cipher;
+pub mod akcipher;
 
 
 pub fn execute_testcases(device:& CryptoDevice){
@@ -16,4 +18,6 @@ pub fn execute_testcases(device:& CryptoDevice){
     CipherTest::test_3des_cbc_encrypt_decrypt(device);
     CipherTest::test_3des_ctr_encrypt_decrypt(device);
 
+    AKCipherTest::test1(device);
+    AKCipherTest::test_rsa_encrypt_decrypt(device);
 }
