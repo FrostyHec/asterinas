@@ -88,7 +88,7 @@ impl AKCipherTest {
             origin_data.clone(),
             128,
             RsaPaddingAlgo::RSA_PKCS1_PADDING,
-            RsaHashAlgo::RSA_MD2,
+            RsaHashAlgo::RSA_MD5,
             AkcipherKeyType::AKCIPHER_KEY_TYPE_PUBLIC,
         );
         let decrypted_data = Self::decrypt_rsa(
@@ -97,7 +97,7 @@ impl AKCipherTest {
             encrypted_data.to_vec(),
             8,
             RsaPaddingAlgo::RSA_PKCS1_PADDING,
-            RsaHashAlgo::RSA_MD2,
+            RsaHashAlgo::RSA_MD5,
             AkcipherKeyType::AKCIPHER_KEY_TYPE_PUBLIC,
         );
         assert_eq!(origin_data, decrypted_data.to_vec());
