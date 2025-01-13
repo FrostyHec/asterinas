@@ -14,6 +14,7 @@ pub trait CryptoSessionTrait: Sized {
     const CREATE_SESSION:  ControlOpcode;
     const DESTROY_SESSION: ControlOpcode;
 
+    type DataOpcode: Into<u32>;
     type DataFlf: Sized + Pod + Default;
     type DataVlfIn:  VarLenFields<Self::DataFlf>;
     type DataVlfOut: VarLenFields<Self::DataFlf>;
@@ -31,6 +32,7 @@ impl CryptoSessionTrait for HashSession {
     const CREATE_SESSION:  ControlOpcode = ControlOpcode::HASH_CREATE_SESSION;
     const DESTROY_SESSION: ControlOpcode = ControlOpcode::HASH_DESTROY_SESSION;
 
+    type DataOpcode = HashOpcode;
     type DataFlf = HashDataFlf;
     type DataVlfIn  = HashDataVlfIn;
     type DataVlfOut = HashDataVlfOut;
@@ -48,6 +50,7 @@ impl CryptoSessionTrait for MacSession {
     const CREATE_SESSION:  ControlOpcode = ControlOpcode::MAC_CREATE_SESSION;
     const DESTROY_SESSION: ControlOpcode = ControlOpcode::MAC_DESTROY_SESSION;
 
+    type DataOpcode = MacOpcode;
     type DataFlf = MacDataFlf;
     type DataVlfIn  = MacDataVlfIn;
     type DataVlfOut = MacDataVlfOut;
@@ -65,6 +68,7 @@ impl CryptoSessionTrait for SymCipherSession {
     const CREATE_SESSION:  ControlOpcode = ControlOpcode::CIPHER_CREATE_SESSION;
     const DESTROY_SESSION: ControlOpcode = ControlOpcode::CIPHER_DESTROY_SESSION;
 
+    type DataOpcode = CipherOpcode;
     type DataFlf = SymCipherDataFlf;
     type DataVlfIn  = SymCipherDataVlfIn;
     type DataVlfOut = SymCipherDataVlfOut;
@@ -82,6 +86,7 @@ impl CryptoSessionTrait for SymAlgChainSession {
     const CREATE_SESSION:  ControlOpcode = ControlOpcode::CIPHER_CREATE_SESSION;
     const DESTROY_SESSION: ControlOpcode = ControlOpcode::CIPHER_DESTROY_SESSION;
 
+    type DataOpcode = CipherOpcode;
     type DataFlf = SymAlgChainDataFlf;
     type DataVlfIn  = SymAlgChainDataVlfIn;
     type DataVlfOut = SymAlgChainDataVlfOut;
@@ -98,6 +103,7 @@ impl CryptoSessionTrait for AeadSession {
     const CREATE_SESSION:  ControlOpcode = ControlOpcode::AEAD_CREATE_SESSION;
     const DESTROY_SESSION: ControlOpcode = ControlOpcode::AEAD_DESTROY_SESSION;
 
+    type DataOpcode = AeadOpcode;
     type DataFlf = AeadDataFlf;
     type DataVlfIn  = AeadDataVlfIn;
     type DataVlfOut = AeadDataVlfOut;
@@ -115,6 +121,7 @@ impl CryptoSessionTrait for AkcipherSession {
     const CREATE_SESSION:  ControlOpcode = ControlOpcode::AKCIPHER_CREATE_SESSION;
     const DESTROY_SESSION: ControlOpcode = ControlOpcode::AKCIPHER_DESTROY_SESSION;
 
+    type DataOpcode = AkcipherOpcode;
     type DataFlf = AkcipherDataFlf;
     type DataVlfIn  = AkcipherDataVlfIn;
     type DataVlfOut = AkcipherDataVlfOut;
@@ -157,11 +164,11 @@ impl<'a, T: CryptoSessionTrait> CryptoSession<'a, T> {
         }
     }
 
-    pub fn basic_request(&self, opcode: u32, flf: &mut T::DataFlf, vlf_in: &T::DataVlfIn)
+    pub fn basic_request(&self, opcode: T::DataOpcode, flf: &mut T::DataFlf, vlf_in: &T::DataVlfIn)
         -> Result<T::DataVlfOut, Status>
     {
         let header = DataHeader {
-            opcode,
+            opcode: opcode.into(),
             algo: self.algo,
             session_id: self.session_id,
             flag: SessionMode::SESSION,
@@ -176,11 +183,11 @@ impl<'a, T: CryptoSessionTrait> CryptoSession<'a, T> {
         }
     }
 
-    pub fn basic_request_stateless(&self, opcode: u32, flf: &mut T::DataFlfStateless, vlf_in: &T::DataVlfStatelessIn)
+    pub fn basic_request_stateless(&self, opcode: T::DataOpcode, flf: &mut T::DataFlfStateless, vlf_in: &T::DataVlfStatelessIn)
         -> Result<T::DataVlfStatelessOut, Status>
     {
         let header = DataHeader {
-            opcode,
+            opcode: opcode.into(),
             algo: self.algo,
             session_id: self.session_id,
             flag: SessionMode::STATELESS,
