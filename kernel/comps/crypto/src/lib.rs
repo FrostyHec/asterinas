@@ -13,13 +13,36 @@ use component::{init_component, ComponentInitError};
 use ostd::sync::SpinLock;
 use spin::Once;
 
-pub static DEFAULT_NAME:&str = "DEFAULT";
+pub struct ArgsConst; 
+impl ArgsConst {
+    pub const DEVICE:DeviceArgsConst = DeviceArgsConst;
+    pub const OPERATION: OperationArgsConst = OperationArgsConst;
+}
+pub struct DeviceArgsConst;
+impl DeviceArgsConst{
+    pub const FIELD_NAME: &str = "device";
+    pub const  DEFAULT_NAME:&str = "DEFAULT";
+}
+
+pub struct OperationArgsConst;
+impl OperationArgsConst{
+    pub const FIELD_NAME: &str = "op";
+    pub const CREATE_SESSION_NAME:&str ="create";
+    pub const DESTROY_SESSION_NAME:&str = "destroy";
+    pub const STATEFUL_OP_NAME:&str = "stateful";
+    pub const STATELESS_OP_NAME:&str = "stateless";
+}
+
+
+
+
+
 
 pub trait VirtIOCryptoDevice: Send + Sync + Any + Debug {
-    fn create_sesson(&self)->id;
-    // fn destroy_session(id:usize);
-    // fn stateful_encrypt();
-    // fn stateless_encrypt();
+    fn create_sesson(&self,args:BTreeMap<String,String>);
+    fn destroy_session(&self,args:BTreeMap<String,String>);
+    fn stateful_operation(&self,args:BTreeMap<String,String>);
+    fn stateless_operation(&self,args:BTreeMap<String,String>);
 }
 
 pub fn register_device(name: &str, device: Arc<dyn VirtIOCryptoDevice>) {

@@ -1,8 +1,8 @@
 use core::hint::spin_loop;
 
-use alloc::{boxed::Box, sync::Arc, vec};
+use alloc::{boxed::Box, collections::btree_map::BTreeMap, sync::Arc, vec};
 use aster_bigtcp::device;
-use aster_crypto::{register_device, VirtIOCryptoDevice};
+use aster_crypto::{register_device, ArgsConst, VirtIOCryptoDevice};
 use log::debug;
 use ostd::{early_print, early_println, mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions, VmReader, VmWriter, PAGE_SIZE}, sync::SpinLock, Pod};
 
@@ -30,9 +30,21 @@ pub struct CryptoDevice {
 }
 
 impl VirtIOCryptoDevice for CryptoDevice{
-    fn create_sesson(&self) {
-        early_println!("Creating session testing...")
+    fn create_sesson(&self,args:BTreeMap<alloc::string::String,alloc::string::String>) {
+        todo!()
     }
+    fn destroy_session(&self,args:BTreeMap<alloc::string::String,alloc::string::String>) {
+        todo!()
+    }
+
+    fn stateful_operation(&self,args:BTreeMap<alloc::string::String,alloc::string::String>) {
+        todo!()
+    }
+
+    fn stateless_operation(&self,args:BTreeMap<alloc::string::String,alloc::string::String>) {
+        todo!()
+    }
+
 }
 
 impl CryptoDevice {
@@ -60,7 +72,7 @@ impl CryptoDevice {
         };
         device.transport.lock().finish_init();
         execute_testcases(&device);
-        register_device(aster_crypto::DEFAULT_NAME, Arc::new(device));
+        register_device(ArgsConst::DEVICE::DEFAULT_NAME, Arc::new(device));
 
         Ok(())
     }
