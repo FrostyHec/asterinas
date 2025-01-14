@@ -2,11 +2,11 @@ use core::{hint::spin_loop, iter::Map};
 
 use alloc::{boxed::Box, collections::btree_map::BTreeMap, sync::Arc, vec};
 use aster_bigtcp::device;
-use aster_crypto::{register_device, ArgsConst, VirtIOCryptoDevice};
+use aster_crypto::{args_const, register_device, VirtIOCryptoDevice};
 use log::debug;
 use ostd::{boot::BootloaderAcpiArg, mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions, VmReader, VmWriter, PAGE_SIZE}, sync::SpinLock, Pod};
 
-use crate::{device::{crypto::{self, header::*, session::{self, *}}, VirtioDeviceError}, queue::VirtQueue, transport::{ConfigManager, VirtioTransport}};
+use crate::{device::{crypto::{self, header::*, session::{self, *}, test::execute_testcases}, VirtioDeviceError}, queue::VirtQueue, transport::{ConfigManager, VirtioTransport}};
 
 use super::config::{FeatureBits, VirtioCryptoConfig};
 
@@ -19,7 +19,7 @@ fn bytes_into_dma(bytes: &[u8], init: bool) -> DmaStreamSlice<DmaStream> {
     }
     DmaStreamSlice::new(stream, 0, bytes.len())
 }
-
+#[derive(Debug)]
 pub struct Device<'a> {
     device: CryptoDevice,
     session_map: BTreeMap<u64, CryptoSessionEnum<'a>>,
@@ -37,7 +37,7 @@ pub struct CryptoDevice {
 }
 impl VirtIOCryptoDevice for CryptoDevice{
     fn create_sesson(&self,args:BTreeMap<alloc::string::String,alloc::string::String>) {
-        todo!()
+        
     }
     fn destroy_session(&self,args:BTreeMap<alloc::string::String,alloc::string::String>) {
         todo!()
@@ -80,13 +80,13 @@ impl CryptoDevice {
         };
         device.transport.lock().finish_init();
 
-        let mut d = Device {
-            device,
-            session_map: BTreeMap::new(),
-        };
+        // let mut d = Device {
+        //     device,
+        //     session_map: BTreeMap::new(),
+        // };
 
         execute_testcases(&device);
-        register_device(ArgsConst::DEVICE::DEFAULT_NAME, Arc::new(device));
+        register_device(args_const::device::DEFAULT_NAME, Arc::new(device));
 
         Ok(())
     }

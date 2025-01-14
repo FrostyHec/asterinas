@@ -100,7 +100,7 @@ impl CryptoSessionTrait for SymAlgChainSession {
     type DataVlfStatelessIn  = SymAlgChainDataVlfStatelessIn;
     type DataVlfStatelessOut = SymAlgChainDataVlfStatelessOut;
 }
-
+#[derive(Debug)]
 pub struct AeadSession;
 impl CryptoSessionTrait for AeadSession {
     type CtrlFlf = AeadCreateSessionFlf;
@@ -137,7 +137,7 @@ impl CryptoSessionTrait for AkcipherSession {
     type DataVlfStatelessIn  = AkcipherDataVlfStatelessIn;
     type DataVlfStatelessOut = AkcipherDataVlfStatelessOut;
 }
-
+#[derive(Debug)]
 pub enum CryptoSessionEnum<'a> {
     Hash(CryptoSession<'a, HashSession>),
     Mac(CryptoSession<'a, MacSession>),

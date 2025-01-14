@@ -5,7 +5,7 @@
 
 use core::cmp;
 
-use aster_crypto::{get_device, ArgsConst, VirtIOCryptoDevice};
+use aster_crypto::{args_const, get_device};
 
 use ostd::early_println;
 
@@ -61,11 +61,11 @@ pub struct Crypto;
 
 impl Crypto {
     pub fn execute(args:BTreeMap<String,String>) {
-        let default_device_name = ArgsConst::DEVICE::DEFAULT_NAME.to_string();
-        let device_name = args.get(ArgsConst::FIELD_NAME).unwrap_or(
+        let default_device_name = arg_const::device::DEFAULT_NAME.to_string();
+        let device_name = args.get(args_const::device::FIELD_NAME).unwrap_or(
             &default_device_name);
         let device = get_device(device_name);
-        let op = match args.get(ArgsConst::OPERATION::FIELD_NAME) {
+        let op = match args.get(args_const::operation::FIELD_NAME) {
             Some(op) => op,
             None => {
                 early_println!("Operation Not Found");
@@ -73,16 +73,16 @@ impl Crypto {
             }
         };
        match op.as_str(){
-            ArgsConst::OPERATION::CREATE_SESSION_NAME =>{
+            args_const::operation::CREATE_SESSION_NAME =>{
                 device.create_sesson(args);
             }
-            Args::OPERATION::DESTROY_SESSION_NAME =>{
+            args_const::operation::DESTROY_SESSION_NAME =>{
                 device.destroy_session(args);
             }
-            Args::OPERATION::STATEFUL_OP_NAME =>{
+            args_const::operation::STATEFUL_OP_NAME =>{
                 device.stateful_operation(args);
             }
-            Args::OPERATION::STATELESS_OP_NAME =>{
+            args_const::operation::STATELESS_OP_NAME =>{
                 device.stateless_operation(args);
             }
             _ =>{
