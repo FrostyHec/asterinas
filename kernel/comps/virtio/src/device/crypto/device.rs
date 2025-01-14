@@ -3,11 +3,11 @@ use core::hint::spin_loop;
 use alloc::{boxed::Box, sync::Arc, vec};
 use aster_bigtcp::device;
 use log::debug;
-use ostd::{mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions, VmReader, VmWriter, PAGE_SIZE}, sync::SpinLock, Pod};
+use ostd::{boot::BootloaderAcpiArg, mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions, VmReader, VmWriter, PAGE_SIZE}, sync::SpinLock, Pod};
 
 use crate::{device::{crypto::{self, header::*, session::*}, VirtioDeviceError}, queue::VirtQueue, transport::{ConfigManager, VirtioTransport}};
 
-use super::{config::VirtioCryptoConfig};
+use super::config::{FeatureBits, VirtioCryptoConfig};
 
 fn bytes_into_dma(bytes: &[u8], init: bool) -> DmaStreamSlice<DmaStream> {
     let vm_segment = FrameAllocOptions::new((bytes.len()-1) / PAGE_SIZE + 1).alloc_contiguous().unwrap();
@@ -26,18 +26,20 @@ pub struct CryptoDevice {
 
     pub data_queue: SpinLock<VirtQueue>,
     pub control_queue: SpinLock<VirtQueue>,
+
+    pub features: FeatureBits,
 }
 
 impl CryptoDevice {
     pub fn negotiate_features(features: u64) -> u64 {
-        debug!("cypto features {:?}", features);
+        debug!("crypto features {:?}", features);
         features
     }
 
     pub fn init(mut transport: Box<dyn VirtioTransport>) -> Result<(), VirtioDeviceError> {
         let config_manager = VirtioCryptoConfig::new_manager(transport.as_ref());
         let config = config_manager.read_config();
-        debug!("virtio_fs_config = {:?}", config);
+        debug!("virtio_crypto_config = {:?}", config);
 
         const QUEUE_SIZE: u16 = 64;
         let data_queue =
@@ -50,6 +52,7 @@ impl CryptoDevice {
             transport: SpinLock::new(transport),
             data_queue,
             control_queue,
+            features: FeatureBits::empty(),
         };
         device.transport.lock().finish_init();
 
