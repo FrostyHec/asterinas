@@ -1,11 +1,11 @@
-use core::hint::spin_loop;
+use core::{hint::spin_loop, iter::Map};
 
-use alloc::{boxed::Box, sync::Arc, vec};
+use alloc::{boxed::Box, collections::btree_map::BTreeMap, sync::Arc, vec};
 use aster_bigtcp::device;
 use log::debug;
 use ostd::{boot::BootloaderAcpiArg, mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions, VmReader, VmWriter, PAGE_SIZE}, sync::SpinLock, Pod};
 
-use crate::{device::{crypto::{self, header::*, session::*}, VirtioDeviceError}, queue::VirtQueue, transport::{ConfigManager, VirtioTransport}};
+use crate::{device::{crypto::{self, header::*, session::{self, *}}, VirtioDeviceError}, queue::VirtQueue, transport::{ConfigManager, VirtioTransport}};
 
 use super::config::{FeatureBits, VirtioCryptoConfig};
 
@@ -17,6 +17,11 @@ fn bytes_into_dma(bytes: &[u8], init: bool) -> DmaStreamSlice<DmaStream> {
         writer.write(&mut VmReader::from(bytes));
     }
     DmaStreamSlice::new(stream, 0, bytes.len())
+}
+
+pub struct Device<'a> {
+    device: CryptoDevice,
+    session_map: BTreeMap<u64, CryptoSession<'a, SymCipherSession>>,
 }
 
 #[derive(Debug)]
@@ -56,8 +61,13 @@ impl CryptoDevice {
         };
         device.transport.lock().finish_init();
 
+        let mut d = Device {
+            device,
+            session_map: BTreeMap::new(),
+        };
+
         let session = CryptoSession::<SymCipherSession>::new(
-            &device, 
+            &d.device, 
             &mut SymCipherCreateSessionFlf::new(
                 CipherSessionFlf::new(
                     CipherAlgo::CIPHER_3DES_CBC,
@@ -69,6 +79,10 @@ impl CryptoDevice {
             },
         ).unwrap();
         debug!("create end");
+
+        let id = session.session_id;
+        d.session_map.insert(session.session_id, session);
+        let session = d.session_map.get(&id).unwrap();
 
         let encrypt_out = session.basic_request(
             CipherOpcode::ENCRYPT, //TODO
@@ -89,6 +103,7 @@ impl CryptoDevice {
             }
         ).unwrap();
         debug!("decrypt output: {:?}", decrypt_out);
+
 
         session.destroy().unwrap();
         debug!("destroy end");

@@ -142,7 +142,7 @@ impl CryptoSessionTrait for AkcipherSession {
 pub struct CryptoSession<'a, T: CryptoSessionTrait> {
     device: &'a CryptoDevice,
     algo: u32,
-    session_id: u64,
+    pub session_id: u64,
     _type_marker: PhantomData<T>,
 }
 
@@ -225,7 +225,7 @@ impl<'a, T: CryptoSessionTrait> CryptoSession<'a, T> {
         }
     }
 
-    pub fn destroy(self) -> Result<(), (Self, Status)> {
+    pub fn destroy(&self) -> Result<(), Status> {
         let header = ControlHeader {
             opcode: T::DESTROY_SESSION as u32,
             algo: self.algo,
@@ -240,7 +240,7 @@ impl<'a, T: CryptoSessionTrait> CryptoSession<'a, T> {
         let status = destroy_info.get_status();
         match status {
             Status::OK => Result::Ok(()),
-            _ => Result::Err((self, status)),
+            _ => Result::Err(status),
         }
     }
 }

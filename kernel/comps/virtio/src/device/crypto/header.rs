@@ -140,9 +140,9 @@ variable_length_fields! {
 }
 
 let vlf = Vlf { field: b"happy".as_slice().into() };
-let mut len = Len { len: 0, other: 123 };
-vlf.fill_lengths(len);
-assert!(len.len==5)
+let mut l = Len { len: 0, other: 123 };
+vlf.fill_lengths(l);
+assert_eq!(l.len, 5);
 ```
 */
 macro_rules! variable_length_fields {
