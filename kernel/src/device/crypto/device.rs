@@ -6,7 +6,6 @@
 use core::cmp;
 
 use aster_crypto::{args_const, get_device};
-
 use ostd::early_println;
 
 use crate::{
@@ -60,8 +59,8 @@ static CRYPTO_FILE:CryptoFile = CryptoFile{
 pub struct Crypto;
 
 impl Crypto {
-    pub fn execute(args:BTreeMap<String,String>) {
-        let default_device_name = arg_const::device::DEFAULT_NAME.to_string();
+    pub fn execute(args:BTreeMap<String,String>) {        
+        let default_device_name = args_const::device::DEFAULT_NAME.to_string();
         let device_name = args.get(args_const::device::FIELD_NAME).unwrap_or(
             &default_device_name);
         let device = get_device(device_name);
