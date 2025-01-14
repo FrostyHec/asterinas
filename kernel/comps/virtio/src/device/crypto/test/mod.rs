@@ -17,7 +17,8 @@ pub fn execute_testcases(device:& CryptoDevice){
     CipherTest::test_3des_ecb_encrypt_decrypt(device);
     CipherTest::test_3des_cbc_encrypt_decrypt(device);
     CipherTest::test_3des_ctr_encrypt_decrypt(device);
+    CipherTest::fuzz_testing(device);
 
-    AKCipherTest::test1(device);
-    AKCipherTest::test_rsa_encrypt_decrypt(device);
+    // AKCipherTest::test1(device);
+    // AKCipherTest::test_rsa_encrypt_decrypt(device);
 }

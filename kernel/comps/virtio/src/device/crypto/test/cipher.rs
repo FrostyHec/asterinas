@@ -1,9 +1,13 @@
 use alloc::{boxed::Box, vec, vec::Vec};
 
 use ostd::early_println;
+use rand::Rng;
 
 use crate::device::crypto::{device::CryptoDevice, header::*, session::*};
-
+use rand::rngs::StdRng;
+use rand::SeedableRng;
+use rand::RngCore;
+use alloc::string::String;
 pub struct CipherTest {}
 
 impl CipherTest {
@@ -184,7 +188,7 @@ impl CipherTest {
     pub fn test_aes_xts_encrypt_decrypt(device: &CryptoDevice) {
         // WARNING: orign data must be a multiple of 16,
         //          iv must be at size 16
-        //          key len must be 48
+        //          key len must be 32
         early_println!("Testing AES_XTS encrypt-decrypt");
 
         let origin_data = vec![
@@ -319,7 +323,61 @@ impl CipherTest {
         early_println!("3DES_CTR encrypt-decrypt test passed")
     }
 
-    pub fn fuzz_testing() {
-        // TODO rnd selected algo, gen key,input,v and test
+    pub fn fuzz_testing(device: &CryptoDevice) {
+        early_println!("begin Fuzz testing...");
+        let mut rng = StdRng::seed_from_u64(0);
+    
+        let algos = [CipherAlgo::CIPHER_3DES_CTR, CipherAlgo::CIPHER_AES_CTR];
+        let algo = {
+            // 将 next_u64 替换为 next_u32
+            let idx = (rng.next_u32() as usize) % algos.len();
+            algos[idx]
+        };
+    
+        let data_len = {
+            let val = (rng.next_u32() as usize) % 128;
+            (16 + val) & !0xf
+        };
+        let mut origin_data = vec![0_u8; data_len];
+        for i in 0..origin_data.len() {
+            origin_data[i] = rng.gen_range(b'a'..=b'z');
+        }
+    
+        let iv_len = match algo {
+            CipherAlgo::CIPHER_3DES_CTR => 8,
+            _ => 16,
+        };
+        let mut iv = vec![0_u8; iv_len];
+        let _ = rng.try_fill_bytes(&mut iv[..]);
+    
+        let key_len = match algo {
+            CipherAlgo::CIPHER_AES_XTS => 32,
+            _ => 24,
+        };
+        let mut key_buf = vec![0_u8; key_len];
+        for i in 0..key_buf.len() {
+            key_buf[i] = rng.gen_range(b'a'..=b'z');
+        }
+
+        let cipher_key = String::from_utf8_lossy(&key_buf);
+    
+        let encrypted_data = CipherTest::encrypt(
+            device,
+            algo,
+            iv.clone(),
+            &cipher_key,
+            origin_data.clone(),
+            origin_data.len() as u32,
+        );
+        let decrypted_data = CipherTest::decrypt(
+            device,
+            algo,
+            iv,
+            &cipher_key,
+            encrypted_data.to_vec(),
+            origin_data.len() as u32,
+        );
+        assert_eq!(origin_data.into_boxed_slice(), decrypted_data);
+        early_println!("Fuzz testing passed!");
     }
 }
