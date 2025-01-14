@@ -1,6 +1,6 @@
 use core::{hint::spin_loop, marker::PhantomData};
 
-use alloc::vec;
+use alloc::{rc::Rc, vec};
 use log::debug;
 use ostd::{mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions, Infallible, VmReader, VmWriter, PAGE_SIZE}, sync::SpinLock, Pod};
 
@@ -138,25 +138,25 @@ impl CryptoSessionTrait for AkcipherSession {
     type DataVlfStatelessOut = AkcipherDataVlfStatelessOut;
 }
 
-pub enum CryptoSessionEnum<'a> {
-    Hash(CryptoSession<'a, HashSession>),
-    Mac(CryptoSession<'a, MacSession>),
-    SymCipher(CryptoSession<'a, SymCipherSession>),
-    SymAlgChain(CryptoSession<'a, SymAlgChainSession>),
-    Aead(CryptoSession<'a, AeadSession>),
-    Akcipher(CryptoSession<'a, AkcipherSession>),
+pub enum CryptoSessionEnum {
+    Hash(CryptoSession<HashSession>),
+    Mac(CryptoSession<MacSession>),
+    SymCipher(CryptoSession<SymCipherSession>),
+    SymAlgChain(CryptoSession<SymAlgChainSession>),
+    Aead(CryptoSession<AeadSession>),
+    Akcipher(CryptoSession<AkcipherSession>),
 }
 
 #[derive(Debug)]
-pub struct CryptoSession<'a, T: CryptoSessionTrait> {
-    device: &'a CryptoDevice,
+pub struct CryptoSession<T: CryptoSessionTrait> {
+    device: Rc<CryptoDevice>,
     algo: u32,
     pub session_id: u64,
     _type_marker: PhantomData<T>,
 }
 
-impl<'a, T: CryptoSessionTrait> CryptoSession<'a, T> {
-    pub fn new(device: &'a CryptoDevice, flf: &mut T::CtrlFlf, vlf: &T::CtrlVlf) 
+impl<'a, T: CryptoSessionTrait> CryptoSession<T> {
+    pub fn new(device: Rc<CryptoDevice>, flf: &mut T::CtrlFlf, vlf: &T::CtrlVlf) 
         -> Result<Self, Status>
     {
         let algo = flf.get_algo();
