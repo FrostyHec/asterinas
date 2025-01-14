@@ -21,7 +21,7 @@ fn bytes_into_dma(bytes: &[u8], init: bool) -> DmaStreamSlice<DmaStream> {
 
 pub struct Device<'a> {
     device: CryptoDevice,
-    session_map: BTreeMap<u64, CryptoSession<'a, SymCipherSession>>,
+    session_map: BTreeMap<u64, CryptoSessionEnum<'a>>,
 }
 
 #[derive(Debug)]
@@ -81,32 +81,32 @@ impl CryptoDevice {
         debug!("create end");
 
         let id = session.session_id;
-        d.session_map.insert(session.session_id, session);
-        let session = d.session_map.get(&id).unwrap();
-
-        let encrypt_out = session.basic_request(
-            CipherOpcode::ENCRYPT, //TODO
-            &mut SymCipherDataFlf::new(CipherDataFlf::new(8)),
-            &SymCipherDataVlfIn {
-                iv: vec![0 as u8; 8].into_boxed_slice(), //len == 8 ? 
-                src_data: vec![190, 147, 128, 144, 239, 38, 200, 41].into_boxed_slice(),
-            }
-        ).unwrap();
-        debug!("encrypt output: {:?}", encrypt_out);
-
-        let decrypt_out = session.basic_request(
-            CipherOpcode::DECRYPT, //TODO: but useless, only the op in create session is used
-            &mut SymCipherDataFlf::new(CipherDataFlf::new(8)),
-            &SymCipherDataVlfIn {
-                iv: vec![0 as u8; 8].into_boxed_slice(), //len == 8 ? 
-                src_data: encrypt_out.dst_data,
-            }
-        ).unwrap();
-        debug!("decrypt output: {:?}", decrypt_out);
-
-
-        session.destroy().unwrap();
-        debug!("destroy end");
+        d.session_map.insert(session.session_id, CryptoSessionEnum::SymCipher(session));
+        if let CryptoSessionEnum::SymCipher(session) = d.session_map.get(&id).unwrap() {
+            let encrypt_out = session.basic_request(
+                CipherOpcode::ENCRYPT, //TODO
+                &mut SymCipherDataFlf::new(CipherDataFlf::new(8)),
+                &SymCipherDataVlfIn {
+                    iv: vec![0 as u8; 8].into_boxed_slice(), //len == 8 ? 
+                    src_data: vec![190, 147, 128, 144, 239, 38, 200, 41].into_boxed_slice(),
+                }
+            ).unwrap();
+            debug!("encrypt output: {:?}", encrypt_out);
+    
+            let decrypt_out = session.basic_request(
+                CipherOpcode::DECRYPT, //TODO: but useless, only the op in create session is used
+                &mut SymCipherDataFlf::new(CipherDataFlf::new(8)),
+                &SymCipherDataVlfIn {
+                    iv: vec![0 as u8; 8].into_boxed_slice(), //len == 8 ? 
+                    src_data: encrypt_out.dst_data,
+                }
+            ).unwrap();
+            debug!("decrypt output: {:?}", decrypt_out);
+    
+    
+            session.destroy().unwrap();
+            debug!("destroy end");
+        }
 
         Ok(())
     }

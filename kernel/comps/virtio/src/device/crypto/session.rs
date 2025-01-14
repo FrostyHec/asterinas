@@ -138,6 +138,15 @@ impl CryptoSessionTrait for AkcipherSession {
     type DataVlfStatelessOut = AkcipherDataVlfStatelessOut;
 }
 
+pub enum CryptoSessionEnum<'a> {
+    Hash(CryptoSession<'a, HashSession>),
+    Mac(CryptoSession<'a, MacSession>),
+    SymCipher(CryptoSession<'a, SymCipherSession>),
+    SymAlgChain(CryptoSession<'a, SymAlgChainSession>),
+    Aead(CryptoSession<'a, AeadSession>),
+    Akcipher(CryptoSession<'a, AkcipherSession>),
+}
+
 #[derive(Debug)]
 pub struct CryptoSession<'a, T: CryptoSessionTrait> {
     device: &'a CryptoDevice,
