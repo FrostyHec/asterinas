@@ -1,4 +1,4 @@
-use alloc::{boxed::Box, vec, vec::Vec};
+use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
 
 use ostd::early_println;
 
@@ -8,7 +8,7 @@ pub struct CipherTest {}
 
 impl CipherTest {
     fn encrypt(
-        device: &CryptoDevice,
+        device: Arc<CryptoDevice>,
         algo: CipherAlgo,
         iv: Vec<u8>,
         key: &str,
@@ -16,7 +16,7 @@ impl CipherTest {
         encrypted_len: u32,
     ) -> Box<[u8]> {
         let encrypt_session = CryptoSession::<SymCipherSession>::new(
-            &device,
+            device,
             &mut SymCipherCreateSessionFlf::new(CipherSessionFlf::new(algo, CryptoOp::OP_ENCRYPT)),
             &mut SymCipherCreateSessionVlf {
                 cipher_key: key.as_bytes().into(), //len should be (<= ?) 24 ?
@@ -40,7 +40,7 @@ impl CipherTest {
     }
 
     fn decrypt(
-        device: &CryptoDevice,
+        device: Arc<CryptoDevice>,
         algo: CipherAlgo,
         iv: Vec<u8>,
         key: &str,
@@ -48,7 +48,7 @@ impl CipherTest {
         decrypted_len: u32,
     ) -> Box<[u8]> {
         let decrypt_session = CryptoSession::<SymCipherSession>::new(
-            &device,
+            device,
             &mut SymCipherCreateSessionFlf::new(CipherSessionFlf::new(algo, CryptoOp::OP_DECRYPT)),
             &mut SymCipherCreateSessionVlf {
                 cipher_key: key.as_bytes().into(), //len should be (<= ?) 24 ?
@@ -71,11 +71,11 @@ impl CipherTest {
         decrypted_data
     }
 
-    pub fn test1(device: &CryptoDevice) {
+    pub fn test1(device: Arc<CryptoDevice>) {
         early_println!("hello testcase1!");
     }
 
-    pub fn test_aes_ecb_encrypt_decrypt(device: &CryptoDevice) {
+    pub fn test_aes_ecb_encrypt_decrypt(device: Arc<CryptoDevice>) {
         // WARNING: orign data must be a multiple of 16,
         //          iv must be at size 16
         early_println!("Testing AES_ECB encrypt-decrypt");
@@ -90,7 +90,7 @@ impl CipherTest {
         // encrypt
         early_println!("encrypting: {:?}", origin_data);
         let encryped_data = CipherTest::encrypt(
-            device,
+            device.clone(),
             algo,
             iv.clone(),
             &cipher_key,
@@ -111,7 +111,7 @@ impl CipherTest {
         early_println!("AES_ECB encrypt-decrypt test passed")
     }
 
-    pub fn test_aes_cbc_encrypt_decrypt(device: &CryptoDevice) {
+    pub fn test_aes_cbc_encrypt_decrypt(device: Arc<CryptoDevice>) {
         // WARNING: orign data must be a multiple of 16,
         //          iv must be at size 16
         early_println!("Testing AES_CBC encrypt-decrypt");
@@ -126,7 +126,7 @@ impl CipherTest {
         // encrypt
         early_println!("encrypting: {:?}", origin_data);
         let encryped_data = CipherTest::encrypt(
-            device,
+            device.clone(),
             algo,
             iv.clone(),
             &cipher_key,
@@ -146,7 +146,7 @@ impl CipherTest {
         early_println!("AES_CBC encrypt-decrypt test passed")
     }
 
-    pub fn test_aes_ctr_encrypt_decrypt(device: &CryptoDevice) {
+    pub fn test_aes_ctr_encrypt_decrypt(device: Arc<CryptoDevice>) {
         // WARNING: orign data must be a multiple of 16,
         //          iv must be at size 16
         early_println!("Testing AES_CTR encrypt-decrypt");
@@ -161,7 +161,7 @@ impl CipherTest {
         // encrypt
         early_println!("encrypting: {:?}", origin_data);
         let encryped_data = CipherTest::encrypt(
-            device,
+            device.clone(),
             algo,
             iv.clone(),
             &cipher_key,
@@ -181,7 +181,7 @@ impl CipherTest {
         early_println!("AES_CTR encrypt-decrypt test passed")
     }
 
-    pub fn test_aes_xts_encrypt_decrypt(device: &CryptoDevice) {
+    pub fn test_aes_xts_encrypt_decrypt(device: Arc<CryptoDevice>) {
         // WARNING: orign data must be a multiple of 16,
         //          iv must be at size 16
         //          key len must be 48
@@ -198,7 +198,7 @@ impl CipherTest {
         // encrypt
         early_println!("encrypting: {:?}", origin_data);
         let encryped_data = CipherTest::encrypt(
-            device,
+            device.clone(),
             algo,
             iv.clone(),
             &cipher_key,
@@ -218,7 +218,7 @@ impl CipherTest {
         early_println!("AES_XTS encrypt-decrypt test passed")
     }
 
-    pub fn test_3des_ecb_encrypt_decrypt(device: &CryptoDevice) {
+    pub fn test_3des_ecb_encrypt_decrypt(device: Arc<CryptoDevice>) {
         // WARNING: orign data must be a multiple of 8(?),
         //          iv must be at size 8
 
@@ -232,7 +232,7 @@ impl CipherTest {
         // encrypt
         early_println!("encrypting: {:?}", origin_data);
         let encryped_data = CipherTest::encrypt(
-            device,
+            device.clone(),
             algo,
             iv.clone(),
             &cipher_key,
@@ -252,7 +252,7 @@ impl CipherTest {
         early_println!("3DES_ECB encrypt-decrypt test passed")
     }
 
-    pub fn test_3des_cbc_encrypt_decrypt(device: &CryptoDevice) {
+    pub fn test_3des_cbc_encrypt_decrypt(device: Arc<CryptoDevice>) {
         // WARNING: orign data must be a multiple of 8(?),
         //          iv must be at size 8
 
@@ -266,7 +266,7 @@ impl CipherTest {
         // encrypt
         early_println!("encrypting: {:?}", origin_data);
         let encryped_data = CipherTest::encrypt(
-            device,
+            device.clone(),
             algo,
             iv.clone(),
             &cipher_key,
@@ -286,7 +286,7 @@ impl CipherTest {
         early_println!("3DES_CBC encrypt-decrypt test passed")
     }
 
-    pub fn test_3des_ctr_encrypt_decrypt(device: &CryptoDevice) {
+    pub fn test_3des_ctr_encrypt_decrypt(device: Arc<CryptoDevice>) {
         // WARNING: orign data must be a multiple of 16,
         //          iv must be at size 16
         early_println!("Testing 3DES_CTR encrypt-decrypt");
@@ -299,7 +299,7 @@ impl CipherTest {
         // encrypt
         early_println!("encrypting: {:?}", origin_data);
         let encryped_data = CipherTest::encrypt(
-            device,
+            device.clone(),
             algo,
             iv.clone(),
             &cipher_key,

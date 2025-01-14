@@ -1,6 +1,6 @@
 use core::{hint::spin_loop, marker::PhantomData};
 
-use alloc::{rc::Rc, vec};
+use alloc::{rc::Rc, sync::Arc, vec};
 use log::debug;
 use ostd::{mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions, Infallible, VmReader, VmWriter, PAGE_SIZE}, sync::SpinLock, Pod};
 
@@ -20,7 +20,7 @@ pub trait CryptoSessionTrait: Sized {
     type DataVlfOut: VarLenFields<Self::DataFlf>;
     const FEATURE_BIT: FeatureBits;
 
-    type DataFlfStateless: Sized + Pod + Default;
+    type DataFlfStateless: Sized + Pod + Default + StatelessFixedLenFields;
     type DataVlfStatelessIn:  VarLenFields<Self::DataFlfStateless>;
     type DataVlfStatelessOut: VarLenFields<Self::DataFlfStateless>;
 }
@@ -137,7 +137,7 @@ impl CryptoSessionTrait for AkcipherSession {
     type DataVlfStatelessIn  = AkcipherDataVlfStatelessIn;
     type DataVlfStatelessOut = AkcipherDataVlfStatelessOut;
 }
-
+#[derive(Debug)]
 pub enum CryptoSessionEnum {
     Hash(CryptoSession<HashSession>),
     Mac(CryptoSession<MacSession>),
@@ -147,16 +147,41 @@ pub enum CryptoSessionEnum {
     Akcipher(CryptoSession<AkcipherSession>),
 }
 
+pub fn basic_request_stateless<T: CryptoSessionTrait>(device: Arc<CryptoDevice>, opcode: T::DataOpcode, flf: &mut T::DataFlfStateless, vlf_in: &T::DataVlfStatelessIn)
+    -> Result<T::DataVlfStatelessOut, Status>
+{
+    let header = DataHeader {
+        opcode: opcode.into(),
+        algo: flf.get_algo(),
+        session_id: 0,
+        flag: SessionMode::STATELESS,
+        padding: 0,
+    };
+    let request_info = session_request(
+        &device.data_queue, 
+        &header, 
+        true,
+        flf, 
+        vlf_in,
+    );
+    let status = request_info.1.get_status();
+    match status {
+        Status::OK => Result::Ok(request_info.0),
+        _ => Result::Err(status),
+    }
+}
+
+
 #[derive(Debug)]
 pub struct CryptoSession<T: CryptoSessionTrait> {
-    device: Rc<CryptoDevice>,
+    device: Arc<CryptoDevice>,
     algo: u32,
     pub session_id: u64,
     _type_marker: PhantomData<T>,
 }
 
 impl<'a, T: CryptoSessionTrait> CryptoSession<T> {
-    pub fn new(device: Rc<CryptoDevice>, flf: &mut T::CtrlFlf, vlf: &T::CtrlVlf) 
+    pub fn new(device: Arc<CryptoDevice>, flf: &mut T::CtrlFlf, vlf: &T::CtrlVlf) 
         -> Result<Self, Status>
     {
         let algo = flf.get_algo();
@@ -200,30 +225,6 @@ impl<'a, T: CryptoSessionTrait> CryptoSession<T> {
             &self.device.data_queue, 
             &header, 
             self.device.features.contains(T::FEATURE_BIT),
-            flf, 
-            vlf_in,
-        );
-        let status = request_info.1.get_status();
-        match status {
-            Status::OK => Result::Ok(request_info.0),
-            _ => Result::Err(status),
-        }
-    }
-
-    pub fn basic_request_stateless(&self, opcode: T::DataOpcode, flf: &mut T::DataFlfStateless, vlf_in: &T::DataVlfStatelessIn)
-        -> Result<T::DataVlfStatelessOut, Status>
-    {
-        let header = DataHeader {
-            opcode: opcode.into(),
-            algo: self.algo,
-            session_id: self.session_id,
-            flag: SessionMode::STATELESS,
-            padding: 0,
-        };
-        let request_info = session_request(
-            &self.device.data_queue, 
-            &header, 
-            true,
             flf, 
             vlf_in,
         );

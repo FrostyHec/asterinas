@@ -846,6 +846,10 @@ impl CryptoInhdr {
     } 
 }
 
+pub trait StatelessFixedLenFields {
+    fn get_algo(&self) -> u32;
+}
+
 
 pub trait DataFlf: Sized + Pod + Default {
     type VlfIn:  VarLenFields<Self>;
@@ -952,6 +956,11 @@ pub struct HashDataFlfStateless {
     pub hash_result_len: u32, 
     reserved: u32, 
 }
+impl StatelessFixedLenFields for HashDataFlfStateless {
+    fn get_algo(&self) -> u32 {
+        self.algo
+    }
+}
 impl HashDataFlfStateless {
     pub fn new(algo: MacAlgo, hash_result_len: u32) -> Self {
         Self {
@@ -1019,6 +1028,12 @@ pub struct MacDataFlfStateless {
     /// hash result length  
     pub hash_result_len: u32, 
 }
+impl StatelessFixedLenFields for MacDataFlfStateless{
+    fn get_algo(&self) -> u32 {
+        self.algo
+    }
+}
+
 impl MacDataFlfStateless {
     pub fn new(algo: MacAlgo, hash_result_len: u32) -> Self {
         Self {
@@ -1245,6 +1260,11 @@ pub struct CipherDataFlfStateless {
     /// length of destination data  
     pub dst_data_len: u32, 
 }
+impl StatelessFixedLenFields for CipherDataFlfStateless {
+    fn get_algo(&self) -> u32 {
+        self.para.algo
+    }
+}
 impl CipherDataFlfStateless {
     pub fn new(para: CipherPara, dst_data_len: u32) -> Self {
         Self {
@@ -1271,6 +1291,12 @@ pub struct SymCipherDataFlfStateless {
     /// See above SYM_OP_*  
     op_type: u32,
 }
+impl StatelessFixedLenFields for SymCipherDataFlfStateless{
+    fn get_algo(&self) -> u32 {
+        self.op_type_flf.get_algo()
+    }
+}
+
 impl SymCipherDataFlfStateless {
     pub fn new(op_type_flf: CipherDataFlfStateless) -> Self {
         Self {
@@ -1402,6 +1428,12 @@ pub struct SymAlgChainDataFlfStateless {
     /// See above SYM_OP_*  
     op_type: u32,
 }
+impl StatelessFixedLenFields for SymAlgChainDataFlfStateless{
+    fn get_algo(&self) -> u32 {
+        self.op_type_flf.para.algo
+    }
+}
+
 impl SymAlgChainDataFlfStateless {
     pub fn new(op_type_flf: AlgChainDataFlfStateless) -> Self {
         Self {
@@ -1563,6 +1595,11 @@ pub struct AeadDataFlfStateless {
     src_data_len: u32, 
     /// length of dst data, this should be at least src_data_len + tag_len  
     pub dst_data_len: u32, 
+}
+impl StatelessFixedLenFields for AeadDataFlfStateless{
+    fn get_algo(&self) -> u32 {
+        self.para.algo
+    }
 }
 impl AeadDataFlfStateless {
     pub fn new(para: AeadPara, tag_len: u32, dst_data_len: u32) -> Self {
@@ -1727,6 +1764,12 @@ pub struct AkcipherDataFlfStateless {
     /// length of destination data  
     pub dst_data_len: u32, 
 }
+impl StatelessFixedLenFields for AkcipherDataFlfStateless{
+    fn get_algo(&self) -> u32 {
+        self.para.algo
+    }
+}
+
 impl AkcipherDataFlfStateless {
     pub fn new(para: AkcipherDataPara, dst_data_len: u32) -> Self {
         Self {

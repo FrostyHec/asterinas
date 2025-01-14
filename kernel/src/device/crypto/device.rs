@@ -3,8 +3,9 @@
 #![allow(unused_variables)]
 
 
-use core::cmp;
+use core::{cmp, sync::atomic::{AtomicBool, Ordering}};
 
+use alloc::format;
 use aster_crypto::{args_const, get_device};
 use ostd::early_println;
 
@@ -19,41 +20,40 @@ use crate::{
 };
 
 struct CryptoFile{
-    is_device_busy:bool,
-    read_buf:Vec<u8>
+    is_device_busy:AtomicBool,
+    read_buf:SpinLock<Vec<u8>>
 }
-
 impl CryptoFile{
-    fn set_device_busy(&mut self){
-        self.is_device_busy = true;
+    fn set_device_busy(&self){
+        self.is_device_busy.store(true,Ordering::SeqCst);
     }
-    fn set_device_free(&mut self){
-        self.is_device_busy = false;
+    fn set_device_free(&self){
+        self.is_device_busy.store(true,Ordering::SeqCst);
     }
     fn get_device_busy(&self)->bool{
-        self.is_device_busy
+        self.is_device_busy.load(Ordering::SeqCst)
     }
 
     fn read_all_buf(&self)->Vec<u8>{
-        self.read_buf.clone()
+        self.read_buf.lock().clone()
     }
 
     fn read_buf(&self,size:usize)->Vec<u8>{
-        let bytes_to_read = cmp::min(size, self.read_buf.len());
-        self.read_buf[..bytes_to_read].to_vec()
+        let bytes_to_read = cmp::min(size, self.read_buf.lock().len());
+        self.read_buf.lock()[..bytes_to_read].to_vec()
     }
 
-    fn clear_buf(&mut self){
-        self.read_buf = Vec::new();
+    fn clear_buf(&self){
+        self.read_buf.lock().clear();
     }
-    pub fn append_buf(&mut self, new_data: &[u8]) {
-        self.read_buf.extend_from_slice(new_data); 
+    pub fn append_buf(&self, new_data: &[u8]) {
+        self.read_buf.lock().extend_from_slice(new_data); 
     }
 }
 
 static CRYPTO_FILE:CryptoFile = CryptoFile{
-    is_device_busy:false,
-    read_buf:Vec::new(),
+    is_device_busy:AtomicBool::new(false),
+    read_buf:SpinLock::new(Vec::new()),
 };
 
 pub struct Crypto;
@@ -73,16 +73,36 @@ impl Crypto {
         };
        match op.as_str(){
             args_const::operation::CREATE_SESSION_NAME =>{
-                device.create_sesson(args);
+                let out:u64;
+                match device.create_sesson(args){
+                    Ok(res) => out = res,
+                    Err(_) => return,
+                };
+                early_println!("Created Session: {:?}",out);
+                CRYPTO_FILE.clear_buf();
+                CRYPTO_FILE.append_buf(format!("{}", out).as_bytes());
             }
             args_const::operation::DESTROY_SESSION_NAME =>{
-                device.destroy_session(args);
+                match device.destroy_session(args){
+                    Ok(_) => {},
+                    Err(_) => return,
+                }
             }
             args_const::operation::STATEFUL_OP_NAME =>{
-                device.stateful_operation(args);
+                let out:Box<[u8]>;
+                match device.stateful_operation(args){
+                    Ok(res) => out = res,
+                    Err(_) => return,
+                };
+                CRYPTO_FILE.append_buf(&out);
             }
             args_const::operation::STATELESS_OP_NAME =>{
-                device.stateless_operation(args);
+                let out:Box<[u8]>;
+                match device.stateless_operation(args){
+                    Ok(res) => out = res,
+                    Err(_) => return,
+                };
+                CRYPTO_FILE.append_buf(&out);
             }
             _ =>{
                 early_println!("Unknown operation type: {:?}",op)
