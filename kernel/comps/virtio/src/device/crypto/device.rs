@@ -91,6 +91,8 @@ impl VirtIOCryptoDevice for CryptoService {
                         return Err("Unsupported algo name");
                     }
                 };
+                early_println!("Args: {:?}",args);
+                early_println!("Parsed key: {:?}",key);
                 let session = CryptoSession::<SymCipherSession>::new(
                     self.device.clone(),
                     &mut SymCipherCreateSessionFlf::new(CipherSessionFlf::new(algo, session_op)),

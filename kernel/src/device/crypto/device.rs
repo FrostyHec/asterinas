@@ -20,24 +20,9 @@ use crate::{
 };
 
 struct CryptoFile{
-    is_device_busy:AtomicBool,
     read_buf:SpinLock<Vec<u8>>
 }
 impl CryptoFile{
-    fn set_device_busy(&self){
-        self.is_device_busy.store(true,Ordering::SeqCst);
-    }
-    fn set_device_free(&self){
-        self.is_device_busy.store(true,Ordering::SeqCst);
-    }
-    fn get_device_busy(&self)->bool{
-        self.is_device_busy.load(Ordering::SeqCst)
-    }
-
-    fn read_all_buf(&self)->Vec<u8>{
-        self.read_buf.lock().clone()
-    }
-
     fn read_buf(&self,size:usize)->Vec<u8>{
         let bytes_to_read = cmp::min(size, self.read_buf.lock().len());
         self.read_buf.lock()[..bytes_to_read].to_vec()
@@ -52,7 +37,6 @@ impl CryptoFile{
 }
 
 static CRYPTO_FILE:CryptoFile = CryptoFile{
-    is_device_busy:AtomicBool::new(false),
     read_buf:SpinLock::new(Vec::new()),
 };
 
@@ -84,24 +68,34 @@ impl Crypto {
             }
             args_const::operation::DESTROY_SESSION_NAME =>{
                 match device.destroy_session(args){
-                    Ok(_) => {},
+                    Ok(_) => {
+                        early_println!("Session destroyed successfully")
+                    },
                     Err(_) => return,
                 }
             }
             args_const::operation::STATEFUL_OP_NAME =>{
                 let out:Box<[u8]>;
                 match device.stateful_operation(args){
-                    Ok(res) => out = res,
+                    Ok(res) => {
+                        out = res;
+                        early_println!("operation output {:?}",out)
+                    },
                     Err(_) => return,
                 };
+                CRYPTO_FILE.clear_buf();
                 CRYPTO_FILE.append_buf(&out);
             }
             args_const::operation::STATELESS_OP_NAME =>{
                 let out:Box<[u8]>;
                 match device.stateless_operation(args){
-                    Ok(res) => out = res,
+                    Ok(res) => {
+                        out = res;
+                        early_println!("operation output {:?}",out)
+                    },
                     Err(_) => return,
                 };
+                CRYPTO_FILE.clear_buf();
                 CRYPTO_FILE.append_buf(&out);
             }
             _ =>{
@@ -136,6 +130,7 @@ impl FileIo for Crypto {
     fn read(&self, writer: &mut VmWriter) -> Result<usize> {
         let buf = CRYPTO_FILE.read_buf(writer.avail());
         let size = writer.write_fallible(&mut buf.as_slice().into())?;
+        early_println!("return val:{:?}",size);
         Ok(size)
     }
 
