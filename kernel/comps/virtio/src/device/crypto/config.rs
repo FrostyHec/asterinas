@@ -1,9 +1,23 @@
+use crate::bitflags;
 use core::mem::offset_of;
 
 use aster_util::safe_ptr::SafePtr;
 use ostd::Pod;
 
 use crate::transport::{ConfigManager, VirtioTransport};
+
+bitflags! {
+    #[repr(C)]
+    #[derive(Pod)]
+    pub struct FeatureBits: u64 {
+        const VIRTIO_CRYPTO_F_REVISION_1              = 1 << 0;
+        const VIRTIO_CRYPTO_F_CIPHER_STATELESS_MODE   = 1 << 1;
+        const VIRTIO_CRYPTO_F_HASH_STATELESS_MODE     = 1 << 2;
+        const VIRTIO_CRYPTO_F_MAC_STATELESS_MODE      = 1 << 3;
+        const VIRTIO_CRYPTO_F_AEAD_STATELESS_MODE     = 1 << 4;
+        const VIRTIO_CRYPTO_F_AKCIPHER_STATELESS_MODE = 1 << 5;
+    }
+}
 
 #[derive(Debug, Pod, Clone, Copy)]
 #[repr(C)]

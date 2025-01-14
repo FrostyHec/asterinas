@@ -6,7 +6,7 @@ use ostd::{mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions, Infa
 
 use crate::queue::VirtQueue;
 
-use super::{device::CryptoDevice, header::{*}};
+use super::{config::FeatureBits, device::CryptoDevice, header::*};
 
 pub trait CryptoSessionTrait: Sized {
     type CtrlFlf: Sized + Pod + Default + CtrlFixedLenFields;
@@ -18,6 +18,7 @@ pub trait CryptoSessionTrait: Sized {
     type DataFlf: Sized + Pod + Default;
     type DataVlfIn:  VarLenFields<Self::DataFlf>;
     type DataVlfOut: VarLenFields<Self::DataFlf>;
+    const FEATURE_BIT: FeatureBits;
 
     type DataFlfStateless: Sized + Pod + Default;
     type DataVlfStatelessIn:  VarLenFields<Self::DataFlfStateless>;
@@ -36,6 +37,7 @@ impl CryptoSessionTrait for HashSession {
     type DataFlf = HashDataFlf;
     type DataVlfIn  = HashDataVlfIn;
     type DataVlfOut = HashDataVlfOut;
+    const FEATURE_BIT: FeatureBits = FeatureBits::VIRTIO_CRYPTO_F_HASH_STATELESS_MODE;
 
     type DataFlfStateless = HashDataFlfStateless;
     type DataVlfStatelessIn  = HashDataVlfStatelessIn;
@@ -54,6 +56,7 @@ impl CryptoSessionTrait for MacSession {
     type DataFlf = MacDataFlf;
     type DataVlfIn  = MacDataVlfIn;
     type DataVlfOut = MacDataVlfOut;
+    const FEATURE_BIT: FeatureBits = FeatureBits::VIRTIO_CRYPTO_F_MAC_STATELESS_MODE;
 
     type DataFlfStateless = MacDataFlfStateless;
     type DataVlfStatelessIn  = MacDataVlfStatelessIn;
@@ -72,6 +75,7 @@ impl CryptoSessionTrait for SymCipherSession {
     type DataFlf = SymCipherDataFlf;
     type DataVlfIn  = SymCipherDataVlfIn;
     type DataVlfOut = SymCipherDataVlfOut;
+    const FEATURE_BIT: FeatureBits = FeatureBits::VIRTIO_CRYPTO_F_CIPHER_STATELESS_MODE;
 
     type DataFlfStateless = SymCipherDataFlfStateless;
     type DataVlfStatelessIn  = SymCipherDataVlfStatelessIn;
@@ -90,6 +94,7 @@ impl CryptoSessionTrait for SymAlgChainSession {
     type DataFlf = SymAlgChainDataFlf;
     type DataVlfIn  = SymAlgChainDataVlfIn;
     type DataVlfOut = SymAlgChainDataVlfOut;
+    const FEATURE_BIT: FeatureBits = FeatureBits::VIRTIO_CRYPTO_F_CIPHER_STATELESS_MODE;
 
     type DataFlfStateless = SymAlgChainDataFlfStateless;
     type DataVlfStatelessIn  = SymAlgChainDataVlfStatelessIn;
@@ -107,6 +112,7 @@ impl CryptoSessionTrait for AeadSession {
     type DataFlf = AeadDataFlf;
     type DataVlfIn  = AeadDataVlfIn;
     type DataVlfOut = AeadDataVlfOut;
+    const FEATURE_BIT: FeatureBits = FeatureBits::VIRTIO_CRYPTO_F_AEAD_STATELESS_MODE;
 
     type DataFlfStateless = AeadDataFlfStateless;
     type DataVlfStatelessIn  = AeadDataVlfStatelessIn;
@@ -125,17 +131,27 @@ impl CryptoSessionTrait for AkcipherSession {
     type DataFlf = AkcipherDataFlf;
     type DataVlfIn  = AkcipherDataVlfIn;
     type DataVlfOut = AkcipherDataVlfOut;
+    const FEATURE_BIT: FeatureBits = FeatureBits::VIRTIO_CRYPTO_F_AKCIPHER_STATELESS_MODE;
 
     type DataFlfStateless = AkcipherDataFlfStateless;
     type DataVlfStatelessIn  = AkcipherDataVlfStatelessIn;
     type DataVlfStatelessOut = AkcipherDataVlfStatelessOut;
 }
 
+pub enum CryptoSessionEnum<'a> {
+    Hash(CryptoSession<'a, HashSession>),
+    Mac(CryptoSession<'a, MacSession>),
+    SymCipher(CryptoSession<'a, SymCipherSession>),
+    SymAlgChain(CryptoSession<'a, SymAlgChainSession>),
+    Aead(CryptoSession<'a, AeadSession>),
+    Akcipher(CryptoSession<'a, AkcipherSession>),
+}
+
 #[derive(Debug)]
 pub struct CryptoSession<'a, T: CryptoSessionTrait> {
     device: &'a CryptoDevice,
     algo: u32,
-    session_id: u64,
+    pub session_id: u64,
     _type_marker: PhantomData<T>,
 }
 
@@ -150,7 +166,13 @@ impl<'a, T: CryptoSessionTrait> CryptoSession<'a, T> {
             flag: 0, reserved: 0, //TODO: flag?
         };
         debug!("opcode: {:?}", T::CREATE_SESSION as u32);
-        let session_info = create_session(&device.control_queue, &header, flf, vlf);
+        let session_info = create_session(
+            &device.control_queue, 
+            &header, 
+            device.features.contains(FeatureBits::VIRTIO_CRYPTO_F_REVISION_1),
+            flf, 
+            vlf,
+        );
         debug!("sessino_info: {:?}", session_info);
         let status = session_info.get_status();
         match status {
@@ -174,8 +196,13 @@ impl<'a, T: CryptoSessionTrait> CryptoSession<'a, T> {
             flag: SessionMode::SESSION,
             padding: 0,
         };
-        let request_info = 
-            session_request(&self.device.data_queue, &header, flf, vlf_in);
+        let request_info = session_request(
+            &self.device.data_queue, 
+            &header, 
+            self.device.features.contains(T::FEATURE_BIT),
+            flf, 
+            vlf_in,
+        );
         let status = request_info.1.get_status();
         match status {
             Status::OK => Result::Ok(request_info.0),
@@ -193,8 +220,13 @@ impl<'a, T: CryptoSessionTrait> CryptoSession<'a, T> {
             flag: SessionMode::STATELESS,
             padding: 0,
         };
-        let request_info = 
-            session_request(&self.device.data_queue, &header, flf, vlf_in);
+        let request_info = session_request(
+            &self.device.data_queue, 
+            &header, 
+            true,
+            flf, 
+            vlf_in,
+        );
         let status = request_info.1.get_status();
         match status {
             Status::OK => Result::Ok(request_info.0),
@@ -202,19 +234,22 @@ impl<'a, T: CryptoSessionTrait> CryptoSession<'a, T> {
         }
     }
 
-    pub fn destroy(self) -> Result<(), (Self, Status)> {
+    pub fn destroy(&self) -> Result<(), Status> {
         let header = ControlHeader {
             opcode: T::DESTROY_SESSION as u32,
             algo: self.algo,
             flag: 0, reserved: 0, //TODO: flag?
         };
         let destroy_info = destroy_session(
-            &self.device.control_queue, &header, self.session_id
+            &self.device.control_queue, 
+            &header,
+            self.device.features.contains(FeatureBits::VIRTIO_CRYPTO_F_REVISION_1),
+            self.session_id,
         );
         let status = destroy_info.get_status();
         match status {
             Status::OK => Result::Ok(()),
-            _ => Result::Err((self, status)),
+            _ => Result::Err(status),
         }
     }
 }
@@ -262,13 +297,20 @@ fn request_by_bytes(queue: &SpinLock<VirtQueue>, in_dma:DmaStreamSlice<DmaStream
 }
 
 
-fn create_session<T: Pod>(control_queue: &SpinLock<VirtQueue>, header: &ControlHeader, flf: &mut T, vlf: &impl VarLenFields<T>) -> CreateSessionInput {
+fn create_session<T: Pod>(control_queue: &SpinLock<VirtQueue>, header: &ControlHeader, stateless: bool, flf: &mut T, vlf: &impl VarLenFields<T>) -> CreateSessionInput {
     vlf.fill_lengths(flf);
-    let in_dma = new_dma(size_of_val(&header) + 56 + vlf.len(), true, // TODO: padding?
+    let in_len = if stateless {
+        size_of_val(&header) + size_of_val(flf) + vlf.len()
+    } else {
+        size_of_val(&header) + 56 + vlf.len()
+    };
+    let in_dma = new_dma(in_len, true, // TODO: padding?
     |mut writer| {
         writer.write(&mut VmReader::from(header.as_bytes()));
         writer.write(&mut VmReader::from(flf.as_bytes()));
-        writer = writer.skip(56 - size_of_val(flf));
+        if !stateless {
+            writer = writer.skip(56 - size_of_val(flf));
+        }
         vlf_write_into_dma(&mut writer, vlf);
     });
 
@@ -280,14 +322,22 @@ fn create_session<T: Pod>(control_queue: &SpinLock<VirtQueue>, header: &ControlH
 }
 
 
-fn destroy_session(control_queue: &SpinLock<VirtQueue>, header: &ControlHeader, session_id: u64) -> DestroySessionInput {
+fn destroy_session(control_queue: &SpinLock<VirtQueue>, header: &ControlHeader, stateless: bool, session_id: u64) -> DestroySessionInput {
     let flf = DestroySessionFlf {
         session_id,
     };
-    let in_dma = new_dma(size_of_val(&header) + size_of_val(&flf), true, // TODO: padding?
+    let in_len = if stateless {
+        size_of_val(&header) + size_of_val(&flf)
+    } else {
+        size_of_val(&header) + 56
+    };
+    let in_dma = new_dma(in_len, true, // TODO: padding?
     |mut writer| {
         writer.write(&mut VmReader::from(header.as_bytes()));
         writer.write(&mut VmReader::from(flf.as_bytes()));
+        if !stateless {
+            writer = writer.skip(56 - size_of_val(&flf));
+        }
     });
 
     let out_len = size_of::<DestroySessionInput>();
@@ -298,15 +348,22 @@ fn destroy_session(control_queue: &SpinLock<VirtQueue>, header: &ControlHeader, 
 }
 
 
-fn session_request<T: Pod, VlfOut: VarLenFields<T>>(data_queue: &SpinLock<VirtQueue>, header: &DataHeader, flf: &mut T, vlf_in: &impl VarLenFields<T>)
+fn session_request<T: Pod, VlfOut: VarLenFields<T>>(data_queue: &SpinLock<VirtQueue>, header: &DataHeader, stateless: bool, flf: &mut T, vlf_in: &impl VarLenFields<T>)
     -> (VlfOut, CryptoInhdr)
 {
     vlf_in.fill_lengths(flf);
-    let in_dma = new_dma(size_of_val(header) + 48 + vlf_in.len(), true, // TODO: padding?
+    let in_len = if stateless {
+        size_of_val(&header) + size_of_val(flf) + vlf_in.len()
+    } else {
+        size_of_val(&header) + 48 + vlf_in.len()
+    };
+    let in_dma = new_dma(in_len, true, // TODO: padding?
     |mut writer| {
         writer.write(&mut VmReader::from(header.as_bytes()));
         writer.write(&mut VmReader::from(flf.as_bytes()));
-        writer = writer.skip(48 - size_of_val(flf));
+        if !stateless {
+            writer = writer.skip(48 - size_of_val(flf));
+        }
         vlf_write_into_dma(&mut writer, vlf_in);
     });
 
