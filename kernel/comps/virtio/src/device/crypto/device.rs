@@ -2,8 +2,9 @@ use core::hint::spin_loop;
 
 use alloc::{boxed::Box, sync::Arc, vec};
 use aster_bigtcp::device;
+use aster_crypto::{register_device, VirtIOCryptoDevice};
 use log::debug;
-use ostd::{mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions, VmReader, VmWriter, PAGE_SIZE}, sync::SpinLock, Pod};
+use ostd::{early_print, early_println, mm::{DmaDirection, DmaStream, DmaStreamSlice, FrameAllocOptions, VmReader, VmWriter, PAGE_SIZE}, sync::SpinLock, Pod};
 
 use crate::{device::{crypto::{self, header::*, session::*, test::execute_testcases}, VirtioDeviceError}, queue::VirtQueue, transport::{ConfigManager, VirtioTransport}};
 
@@ -26,6 +27,12 @@ pub struct CryptoDevice {
 
     pub data_queue: SpinLock<VirtQueue>,
     pub control_queue: SpinLock<VirtQueue>,
+}
+
+impl VirtIOCryptoDevice for CryptoDevice{
+    fn create_sesson(&self) {
+        early_println!("Creating session testing...")
+    }
 }
 
 impl CryptoDevice {
@@ -52,8 +59,8 @@ impl CryptoDevice {
             control_queue,
         };
         device.transport.lock().finish_init();
-
         execute_testcases(&device);
+        register_device(aster_crypto::DEFAULT_NAME, Arc::new(device));
 
         Ok(())
     }
@@ -77,3 +84,4 @@ impl CryptoDevice {
     //     out_dma.reader().expect("get reader error").read(&mut VmWriter::from(out_bytes))
     // }
 }
+

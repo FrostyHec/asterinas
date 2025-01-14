@@ -8,6 +8,7 @@ mod random;
 pub mod tty;
 mod urandom;
 mod zero;
+pub mod crypto;
 
 cfg_if! {
     if #[cfg(all(target_arch = "x86_64", feature = "cvm_guest"))] {
@@ -53,6 +54,8 @@ pub fn init() -> Result<()> {
     add_node(random, "random")?;
     let urandom = Arc::new(urandom::Urandom);
     add_node(urandom, "urandom")?;
+    let crypto = Arc::new(crypto::Crypto);
+    add_node(crypto, "crypto")?;
     pty::init()?;
     Ok(())
 }
@@ -76,6 +79,7 @@ pub fn get_device(dev: usize) -> Result<Arc<dyn Device>> {
         (5, 0) => Ok(Arc::new(tty::TtyDevice)),
         (1, 8) => Ok(Arc::new(random::Random)),
         (1, 9) => Ok(Arc::new(urandom::Urandom)),
+        (1, 10) => Ok(Arc::new(crypto::Crypto)),
         _ => return_errno_with_message!(Errno::EINVAL, "unsupported device"),
     }
 }
