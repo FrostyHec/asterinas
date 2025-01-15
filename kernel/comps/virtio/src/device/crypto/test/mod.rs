@@ -16,5 +16,4 @@ pub fn execute_testcases(device:Arc<CryptoDevice>){
     CipherTest::test_3des_ecb_encrypt_decrypt(device.clone());
     CipherTest::test_3des_cbc_encrypt_decrypt(device.clone());
     CipherTest::test_3des_ctr_encrypt_decrypt(device.clone());
-
 }

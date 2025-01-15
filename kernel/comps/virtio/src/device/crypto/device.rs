@@ -77,7 +77,7 @@ impl VirtIOCryptoDevice for CryptoService {
             args_const::session_op::ENCRYPT_NAME => CryptoOp::OP_ENCRYPT,
             args_const::session_op::DECRYPT_NAME => CryptoOp::OP_DECRYPT,
             _ => {
-                early_println!("Unsupported session-op name {:?}", session_op_name);
+                debug!("Unsupported session-op name {:?}", session_op_name);
                 return Err("Unsupported session-op name");
             }
         };
@@ -91,8 +91,6 @@ impl VirtIOCryptoDevice for CryptoService {
                         return Err("Unsupported algo name");
                     }
                 };
-                early_println!("Args: {:?}",args);
-                early_println!("Parsed key: {:?}",key);
                 let session = CryptoSession::<SymCipherSession>::new(
                     self.device.clone(),
                     &mut SymCipherCreateSessionFlf::new(CipherSessionFlf::new(algo, session_op)),
@@ -176,7 +174,7 @@ impl VirtIOCryptoDevice for CryptoService {
                         match res {
                             Ok(value)=> value,
                             Err(e) => {
-                                early_println!("Failed Response Status {:?}",e);
+                                debug!("Failed Response Status {:?}",e);
                                 return Err("Failed Response Status");
                             },
                         }    

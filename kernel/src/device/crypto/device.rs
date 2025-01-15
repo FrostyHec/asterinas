@@ -62,14 +62,14 @@ impl Crypto {
                     Ok(res) => out = res,
                     Err(_) => return,
                 };
-                early_println!("Created Session: {:?}",out);
+                debug!("Created Session: {:?}",out);
                 CRYPTO_FILE.clear_buf();
                 CRYPTO_FILE.append_buf(format!("{}", out).as_bytes());
             }
             args_const::operation::DESTROY_SESSION_NAME =>{
                 match device.destroy_session(args){
                     Ok(_) => {
-                        early_println!("Session destroyed successfully")
+                        debug!("Session destroyed successfully")
                     },
                     Err(_) => return,
                 }
@@ -79,7 +79,7 @@ impl Crypto {
                 match device.stateful_operation(args){
                     Ok(res) => {
                         out = res;
-                        early_println!("operation output {:?}",out)
+                        debug!("operation output {:?}",out)
                     },
                     Err(_) => return,
                 };
@@ -130,7 +130,6 @@ impl FileIo for Crypto {
     fn read(&self, writer: &mut VmWriter) -> Result<usize> {
         let buf = CRYPTO_FILE.read_buf(writer.avail());
         let size = writer.write_fallible(&mut buf.as_slice().into())?;
-        early_println!("return val:{:?}",size);
         Ok(size)
     }
 
@@ -140,7 +139,6 @@ impl FileIo for Crypto {
             .map_err(|(err, _)| err).unwrap();
 
         let input = String::from_utf8(buffer).unwrap();
-        early_println!("input str {:?}",input);
         let args = parse_kv_pairs(&input);
         Crypto::execute(args);
         Ok(bytes_read)
