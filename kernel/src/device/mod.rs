@@ -2,13 +2,13 @@
 
 use cfg_if::cfg_if;
 
+pub mod crypto;
 mod null;
 mod pty;
 mod random;
 pub mod tty;
 mod urandom;
 mod zero;
-pub mod crypto;
 
 cfg_if! {
     if #[cfg(all(target_arch = "x86_64", feature = "cvm_guest"))] {

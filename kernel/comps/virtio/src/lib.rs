@@ -18,12 +18,12 @@ use component::{init_component, ComponentInitError};
 use device::{
     block::device::BlockDevice,
     console::device::ConsoleDevice,
+    crypto::device::CryptoDevice,
+    entropy::EntropyDevice,
     input::device::InputDevice,
     network::device::NetworkDevice,
     socket::{self, device::SocketDevice},
     VirtioDeviceType,
-    entropy::EntropyDevice,
-    crypto::device::CryptoDevice,
 };
 use log::{error, warn};
 use transport::{mmio::VIRTIO_MMIO_DRIVER, pci::VIRTIO_PCI_DRIVER, DeviceStatus};

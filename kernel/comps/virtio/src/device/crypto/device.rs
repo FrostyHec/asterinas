@@ -1,16 +1,12 @@
 use alloc::{
     boxed::Box,
     collections::btree_map::BTreeMap,
-    rc::Rc,
-    string::{String, ToString},
+    string::String,
     sync::Arc,
-    vec,
 };
-use core::{cmp, hint::spin_loop, iter::Map};
 
-use aster_bigtcp::device;
 use aster_crypto::{
-    args_const::{self, service},
+    args_const::{self},
     register_device, VirtIOCryptoDevice,
 };
 use log::debug;
@@ -139,7 +135,7 @@ impl VirtIOCryptoDevice for CryptoService {
         }
     }
 
-    fn stateful_operation(&self, args: BTreeMap<String, String>)->Result<Box<[u8]>,&str> {
+    fn stateful_operation(&self, args: BTreeMap<String, String>) -> Result<Box<[u8]>, &str> {
         let session_id_str = get_or_return(&args, args_const::SESSION_ID_FIELD_NAME)?;
         let session_id: u64 = match session_id_str.parse::<u64>() {
             Ok(id) => id,
@@ -162,22 +158,21 @@ impl VirtIOCryptoDevice for CryptoService {
             Some(session) => {
                 let encrypt_out = match session {
                     CryptoSessionEnum::SymCipher(crypto_session) => {
-                        let res = crypto_session
-                            .basic_request(
-                                CipherOpcode::ENCRYPT,
-                                &mut SymCipherDataFlf::new(CipherDataFlf::new(out_len)),
-                                &SymCipherDataVlfIn {
-                                    iv: iv.as_bytes().into(), 
-                                    src_data: src_data.as_bytes().into(),
-                                },
-                            );
-                        match res {
-                            Ok(value)=> value,
-                            Err(e) => {
-                                debug!("Failed Response Status {:?}",e);
-                                return Err("Failed Response Status");
+                        let res = crypto_session.basic_request(
+                            CipherOpcode::ENCRYPT,
+                            &mut SymCipherDataFlf::new(CipherDataFlf::new(out_len)),
+                            &SymCipherDataVlfIn {
+                                iv: iv.as_bytes().into(),
+                                src_data: src_data.as_bytes().into(),
                             },
-                        }    
+                        );
+                        match res {
+                            Ok(value) => value,
+                            Err(e) => {
+                                debug!("Failed Response Status {:?}", e);
+                                return Err("Failed Response Status");
+                            }
+                        }
                     }
                     _ => {
                         early_println!("Session type not support: {:?}", session_id);
@@ -192,11 +187,11 @@ impl VirtIOCryptoDevice for CryptoService {
             }
         }
     }
-    
-    fn stateless_operation(&self, args: BTreeMap<String, String>)->Result<Box<[u8]>,&str> {
+
+    fn stateless_operation(&self, args: BTreeMap<String, String>) -> Result<Box<[u8]>, &str> {
+        let _ = args;
         todo!()
     }
-
 }
 
 impl CryptoDevice {
@@ -235,23 +230,4 @@ impl CryptoDevice {
 
         Ok(())
     }
-
-    // fn request_by_bytes(&self, in_bytes: &[u8], out_bytes: &mut [u8]) -> usize {
-    //     let mut queue = self.data_queue.disable_irq().lock();
-
-    //     let in_dma = bytes_into_dma(in_bytes, true);
-    //     let out_dma = bytes_into_dma(out_bytes, false);
-    //     let token = queue
-    //         .add_dma_buf(&[&in_dma], &[&out_dma])
-    //         .expect("add queue failed");
-    //     if queue.should_notify() {
-    //         queue.notify();
-    //     }
-    //     while !queue.can_pop() {
-    //         spin_loop();
-    //     }
-    //     queue.pop_used_with_token(token).expect("pop used failed");
-    //     out_dma.sync().expect("sync failed");
-    //     out_dma.reader().expect("get reader error").read(&mut VmWriter::from(out_bytes))
-    // }
 }

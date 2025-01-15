@@ -1,10 +1,12 @@
-use crate::bitflags;
 use core::mem::offset_of;
 
 use aster_util::safe_ptr::SafePtr;
 use ostd::Pod;
 
-use crate::transport::{ConfigManager, VirtioTransport};
+use crate::{
+    bitflags,
+    transport::{ConfigManager, VirtioTransport},
+};
 
 bitflags! {
     #[repr(C)]
@@ -50,7 +52,6 @@ impl VirtioCryptoConfig {
         ConfigManager::new(safe_ptr, bar_space)
     }
 }
-
 
 impl ConfigManager<VirtioCryptoConfig> {
     pub(super) fn read_config(&self) -> VirtioCryptoConfig {

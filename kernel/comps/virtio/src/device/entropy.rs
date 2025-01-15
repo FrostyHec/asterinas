@@ -1,9 +1,12 @@
 use alloc::{boxed::Box, sync::Arc};
-use ostd::{mm::{DmaDirection, DmaStream, FrameAllocOptions}, sync::SpinLock};
 
-use crate::{queue::VirtQueue, transport::VirtioTransport};
+use ostd::{
+    mm::{DmaDirection, DmaStream, FrameAllocOptions},
+    sync::SpinLock,
+};
 
 use super::VirtioDeviceError;
+use crate::{queue::VirtQueue, transport::VirtioTransport};
 
 pub struct EntropyDevice {
     request_buffer: DmaStream,
@@ -19,12 +22,11 @@ impl EntropyDevice {
         // Initalize the request virtqueue
         const REQUEST_QUEUE_INDEX: u16 = 0;
         let request_queue =
-        SpinLock::new(VirtQueue::new(REQUEST_QUEUE_INDEX, 1,
-        transport.as_mut()).unwrap());
+            SpinLock::new(VirtQueue::new(REQUEST_QUEUE_INDEX, 1, transport.as_mut()).unwrap());
         // Initalize the request buffer
         let request_buffer = {
             let vm_segment = FrameAllocOptions::new(1).alloc_contiguous().unwrap();
-            DmaStream::map(vm_segment, DmaDirection::FromDevice,false).unwrap()
+            DmaStream::map(vm_segment, DmaDirection::FromDevice, false).unwrap()
         };
         // Create device
         let device = Arc::new(Self {
@@ -39,4 +41,3 @@ impl EntropyDevice {
         Ok(())
     }
 }
-    

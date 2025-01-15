@@ -7,7 +7,12 @@
 extern crate alloc;
 
 use alloc::{
-    boxed::Box, collections::BTreeMap, fmt::Debug, string::{String, ToString}, sync::Arc, vec::Vec
+    boxed::Box,
+    collections::BTreeMap,
+    fmt::Debug,
+    string::{String, ToString},
+    sync::Arc,
+    vec::Vec,
 };
 use core::any::Any;
 
@@ -38,27 +43,27 @@ pub mod args_const {
     }
     pub const KEY_FIELD_NAME: &str = "key";
     pub const ALGO_FIELD_NAME: &str = "algo";
-    pub const SESSION_ID_FIELD_NAME:&str = "id";
+    pub const SESSION_ID_FIELD_NAME: &str = "id";
     pub mod algo {
         pub mod cipher {
             pub const AES_ECB: &str = "aes_ecb";
         }
     }
-    pub mod session_op{
-        pub const FIELD_NAME:&str = "session-op";
-        pub const ENCRYPT_NAME:&str  = "encrypt";
-        pub const DECRYPT_NAME:&str  = "decrypt";
+    pub mod session_op {
+        pub const FIELD_NAME: &str = "session-op";
+        pub const ENCRYPT_NAME: &str = "encrypt";
+        pub const DECRYPT_NAME: &str = "decrypt";
     }
-    pub const IV_FIELD_NAME:&str = "iv";
-    pub const SRC_FIELD_NAME:&str = "src-data";
-    pub const OUT_LEN_NAME:&str = "out-len";
+    pub const IV_FIELD_NAME: &str = "iv";
+    pub const SRC_FIELD_NAME: &str = "src-data";
+    pub const OUT_LEN_NAME: &str = "out-len";
 }
 
 pub trait VirtIOCryptoDevice: Send + Sync + Any + Debug {
     fn create_sesson(&self, args: BTreeMap<String, String>) -> Result<u64, &str>;
-    fn destroy_session(&self, args: BTreeMap<String, String>)->Result<(),&str>;
-    fn stateful_operation(&self, args: BTreeMap<String, String>)->Result<Box<[u8]>,&str>;
-    fn stateless_operation(&self, args: BTreeMap<String, String>)->Result<Box<[u8]>,&str>;
+    fn destroy_session(&self, args: BTreeMap<String, String>) -> Result<(), &str>;
+    fn stateful_operation(&self, args: BTreeMap<String, String>) -> Result<Box<[u8]>, &str>;
+    fn stateless_operation(&self, args: BTreeMap<String, String>) -> Result<Box<[u8]>, &str>;
 }
 
 pub fn register_device(name: &str, device: Arc<dyn VirtIOCryptoDevice>) {
