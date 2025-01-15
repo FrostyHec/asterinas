@@ -317,7 +317,7 @@ impl CipherTest {
         early_println!("3DES_CTR encrypt-decrypt test passed")
     }
 
-    pub fn fuzz_testing(device: &CryptoDevice) {
+    pub fn fuzz_testing(device: Arc<CryptoDevice>) {
         early_println!("begin Fuzz testing...");
         let mut rng = StdRng::seed_from_u64(0);
     
@@ -356,7 +356,7 @@ impl CipherTest {
         let cipher_key = String::from_utf8_lossy(&key_buf);
     
         let encrypted_data = CipherTest::encrypt(
-            device,
+            device.clone(),
             algo,
             iv.clone(),
             &cipher_key,

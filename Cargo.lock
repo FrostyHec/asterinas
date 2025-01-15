@@ -286,6 +286,7 @@ dependencies = [
  "int-to-c-enum",
  "log",
  "ostd",
+ "rand",
  "spin 0.9.8",
  "typeflags-util",
 ]
