@@ -71,18 +71,12 @@ impl CipherTest {
         decrypted_data
     }
 
-    pub fn test1(device: Arc<CryptoDevice>) {
-        early_println!("hello testcase1!");
-    }
-
     pub fn test_aes_ecb_encrypt_decrypt(device: Arc<CryptoDevice>) {
         // WARNING: orign data must be a multiple of 16,
         //          iv must be at size 16
         early_println!("Testing AES_ECB encrypt-decrypt");
 
-        let origin_data = vec![
-            190, 147, 128, 144, 239, 38, 200, 41, 190, 147, 128, 144, 239, 38, 200, 41,
-        ];
+        let origin_data = vec![190, 147, 128, 144, 239, 38, 200, 41, 190, 147, 128, 144, 239, 38, 200, 41,];
         let iv = vec![0 as u8; 16];
         let cipher_key = "yv8.,7f 0,q7fhq 1u9ep,1 ";
         let encrypted_len: u32 = origin_data.len() as u32;
